@@ -18,7 +18,7 @@ import { friendlyErrorMessage } from "@/core/errors/failures";
 import { NodoColors } from "@/core/theme/colors";
 import { useAuth } from "@/features/auth/context/auth-context";
 import { projectService } from "@/features/projects/services/project-service";
-import { Project, ProjectStatus } from "@/features/projects/types/project";
+import { Project, ProjectStatus, TeamMember } from "@/features/projects/types/project";
 
 const STATUS_OPTIONS: { value: ProjectStatus; label: string }[] = [
   { value: "idea", label: "Idea" },
@@ -33,6 +33,7 @@ export function PublishUpdateScreen() {
   const { signedInUser } = useAuth();
 
   const [project, setProject] = useState<Project | null>(null);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [newStatus, setNewStatus] = useState<ProjectStatus | null>(null);
@@ -44,7 +45,13 @@ export function PublishUpdateScreen() {
     if (!id) return;
     projectService
       .fetchProjectById(id)
-      .then(setProject)
+      .then(async (loadedProject) => {
+        setProject(loadedProject);
+        if (loadedProject) {
+          const members = await projectService.fetchTeamMembers(loadedProject);
+          setTeamMembers(members);
+        }
+      })
       .catch((err) => console.warn("Error al cargar proyecto:", err))
       .finally(() => setIsLoading(false));
   }, [id]);
@@ -85,12 +92,17 @@ export function PublishUpdateScreen() {
     );
   }
 
-  if (!signedInUser || signedInUser.id !== project.creatorId) {
+  const isCreator = signedInUser?.id === project.creatorId;
+  const isMember = teamMembers.some(
+    (member) => member.userId === signedInUser?.id && !member.isCreator,
+  );
+
+  if (!isCreator && !isMember) {
     return (
       <View style={[styles.centered, { paddingTop: insets.top, padding: 24 }]}>
         <Text style={styles.headerTitle}>Acceso denegado</Text>
         <Text style={styles.deniedText}>
-          Solo el creador del proyecto puede publicar actualizaciones.
+          Solo el líder o los colaboradores aceptados pueden publicar actualizaciones.
         </Text>
         <Pressable onPress={() => router.back()} style={styles.submitBtn}>
           <Text style={styles.submitBtnText}>Volver</Text>
@@ -149,28 +161,32 @@ export function PublishUpdateScreen() {
             textAlignVertical="top"
           />
 
-          <Text style={styles.label}>Estado del proyecto</Text>
-          <View style={styles.statusRow}>
-            {STATUS_OPTIONS.map((opt) => {
-              const active = currentStatus === opt.value;
-              return (
-                <Pressable
-                  key={opt.value}
-                  onPress={() => setNewStatus(opt.value)}
-                  style={[styles.statusChip, active && styles.statusChipActive]}
-                >
-                  <Text
-                    style={[
-                      styles.statusChipText,
-                      active && styles.statusChipTextActive,
-                    ]}
-                  >
-                    {opt.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+          {isCreator ? (
+            <>
+              <Text style={styles.label}>Estado del proyecto</Text>
+              <View style={styles.statusRow}>
+                {STATUS_OPTIONS.map((opt) => {
+                  const active = currentStatus === opt.value;
+                  return (
+                    <Pressable
+                      key={opt.value}
+                      onPress={() => setNewStatus(opt.value)}
+                      style={[styles.statusChip, active && styles.statusChipActive]}
+                    >
+                      <Text
+                        style={[
+                          styles.statusChipText,
+                          active && styles.statusChipTextActive,
+                        ]}
+                      >
+                        {opt.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </>
+          ) : null}
 
           <Pressable
             onPress={handleSubmit}

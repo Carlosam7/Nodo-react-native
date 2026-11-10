@@ -6,7 +6,7 @@ import { useAuth } from "@/features/auth/context/auth-context";
 
 export function HomeHeader() {
   const router = useRouter();
-  const { isPublicSession, signedInUser, logout } = useAuth();
+  const { isPublicSession, signedInUser } = useAuth();
 
   const handleNotificationPress = () => {
     // Modo maqueta (stub) conforme al acuerdo del Lienzo de Alineación
@@ -17,11 +17,7 @@ export function HomeHeader() {
     if (isPublicSession) {
       router.push("/auth/login");
     } else {
-      // Aún no existe pantalla de perfil: ofrecer cerrar sesión
-      Alert.alert(signedInUser?.name ?? "Mi cuenta", undefined, [
-        { text: "Cancelar", style: "cancel" },
-        { text: "Cerrar sesión", style: "destructive", onPress: () => logout() },
-      ]);
+      router.push("/profile");
     }
   };
 

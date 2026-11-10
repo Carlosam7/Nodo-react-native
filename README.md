@@ -1,5 +1,11 @@
 # Welcome to your Expo app 👋
 
+## Demo de migración Flutter → React Native
+
+Video demostrativo de la migración: [Ver demo en YouTube](TU_LINK_DE_YOUTUBE)
+
+> Reemplaza `TU_LINK_DE_YOUTUBE` por el enlace del video antes de entregar el repositorio.
+
 This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
 
 ## Get started

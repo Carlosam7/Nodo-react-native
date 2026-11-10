@@ -1,5 +1,6 @@
 import { roble, RobleClient, RobleUser } from '@/core/db/roble-client';
 import { RowParsing } from '@/core/db/row-parsing';
+import { ValidationFailure } from '@/core/errors/failures';
 import { catalogService, CatalogService } from '@/core/services/catalog-service';
 import { userProfileService, UserProfileService } from '@/core/services/user-profile-service';
 import { NodoColors } from '@/core/theme/colors';
@@ -293,6 +294,28 @@ export class ProjectService {
     projectRecordId?: string;
   }): Promise<ProjectUpdate> {
     const { projectId, author, title, body, newStatus, projectRecordId } = params;
+    const project = await this.fetchProjectById(projectId);
+    if (!project) {
+      throw new ValidationFailure('No se encontró el proyecto.');
+    }
+
+    const isCreator = project.creatorId === author.id;
+    const isAcceptedMember =
+      !isCreator &&
+      (await this.fetchTeamMembers(project)).some(
+        (member) => member.userId === author.id && !member.isCreator,
+      );
+    if (!isCreator && !isAcceptedMember) {
+      throw new ValidationFailure(
+        'Solo el líder o los colaboradores aceptados pueden publicar actualizaciones.',
+      );
+    }
+    if (newStatus && !isCreator) {
+      throw new ValidationFailure(
+        'Solo el líder puede cambiar el estado del proyecto.',
+      );
+    }
+
     const id = generateUuidV4();
     const now = new Date();
 
