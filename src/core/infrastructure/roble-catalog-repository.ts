@@ -1,19 +1,10 @@
-import { RobleClient, roble } from '../db/roble-client';
+import type { Database } from "@/core/domain/database";
 import { RowParsing } from '../db/row-parsing';
 import { generateUuidV4 } from '../utils/uuid';
 
 export type CatalogTable = 'categories' | 'skills';
 
 export class CatalogService {
-  private static instance: CatalogService | null = null;
-
-  static getInstance(db: RobleClient = roble): CatalogService {
-    if (!this.instance) {
-      this.instance = new CatalogService(db);
-    }
-    return this.instance;
-  }
-
   private cache: Record<CatalogTable, Map<string, string> | null> = {
     categories: null,
     skills: null,
@@ -22,7 +13,7 @@ export class CatalogService {
   static readonly nameMinLength = 2;
   static readonly nameMaxLength = 40;
 
-  constructor(private readonly database: RobleClient = roble) {}
+  constructor(private readonly database: Database) {}
 
   static normalize(name: string): string {
     return name.trim().replace(/\s+/g, ' ').toUpperCase();
@@ -103,5 +94,3 @@ export class CatalogService {
     return null;
   }
 }
-
-export const catalogService = CatalogService.getInstance();

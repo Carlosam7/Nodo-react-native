@@ -1,3 +1,4 @@
+import { LineIcon } from "@/components/ui/line-icon";
 import { useRouter } from "expo-router";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -54,7 +55,7 @@ export function HomeHeader() {
             accessibilityRole="button"
             accessibilityLabel="Notificaciones"
           >
-            <Text style={styles.bellIcon}>🔔</Text>
+            <LineIcon name="bell-1" size={21} color={NodoColors.textPrimary} />
             <View style={styles.notificationDot} />
           </Pressable>
 

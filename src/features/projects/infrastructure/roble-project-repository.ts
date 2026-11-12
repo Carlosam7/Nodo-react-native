@@ -1,38 +1,29 @@
-import { roble, RobleClient, RobleUser } from '@/core/db/roble-client';
+import type { User as RobleUser } from "@/features/auth/domain/user";
+import type { Database } from "@/core/domain/database";
 import { RowParsing } from '@/core/db/row-parsing';
-import { ValidationFailure } from '@/core/errors/failures';
-import { catalogService, CatalogService } from '@/core/services/catalog-service';
-import { userProfileService, UserProfileService } from '@/core/services/user-profile-service';
-import { NodoColors } from '@/core/theme/colors';
+import type { PublishUpdateInput } from '../application/publish-update';
+import type { CatalogRepository } from "@/core/application/repositories";
 import { generateUuidV4 } from '@/core/utils/uuid';
 import {
   Project,
   ProjectDraft,
+  ProjectEdit,
   ProjectStatus,
   ProjectUpdate,
   TeamMember,
 } from '../types/project';
 
-export class ProjectService {
-  private static instance: ProjectService | null = null;
-
-  static getInstance(): ProjectService {
-    if (!this.instance) {
-      this.instance = new ProjectService();
-    }
-    return this.instance;
-  }
-
+export class RobleProjectRepository {
   constructor(
-    private readonly db: RobleClient = roble,
-    private readonly catalog: CatalogService = catalogService,
-    private readonly profiles: UserProfileService = userProfileService
+    private readonly db: Database,
+    private readonly catalog: CatalogRepository,
+    private readonly projectGradients: readonly (readonly string[])[]
   ) {}
 
   static readonly ALL_CATEGORIES = 'TODAS';
 
   private getRandomGradient(seed: string): string[] {
-    const list = NodoColors.projectGradients;
+    const list = this.projectGradients;
     let hash = 0;
     for (let i = 0; i < seed.length; i++) {
       hash = (hash << 5) - hash + seed.charCodeAt(i);
@@ -46,18 +37,17 @@ export class ProjectService {
     try {
       const catMap = await this.catalog.readAll('categories');
       const names = Object.values(catMap).sort();
-      return [ProjectService.ALL_CATEGORIES, ...names];
+      return [RobleProjectRepository.ALL_CATEGORIES, ...names];
     } catch {
-      return [ProjectService.ALL_CATEGORIES];
+      return [RobleProjectRepository.ALL_CATEGORIES];
     }
   }
 
-  async fetchProjects(options?: { category?: string }): Promise<Project[]> {
-    const { category } = options || {};
+  async fetchProjects(): Promise<Project[]> {
 
     const [projectsRows, categoriesMap, projCategoriesRows, skillsMap, projSkillsRows] =
       await Promise.all([
-        this.safeRead('projects'),
+        this.db.read<Record<string, unknown>>('projects'),
         this.catalog.readAll('categories').catch(() => ({})),
         this.safeRead('project_categories'),
         this.catalog.readAll('skills').catch(() => ({})),
@@ -75,7 +65,7 @@ export class ProjectService {
       skillsMap
     );
 
-    const projects: Project[] = projectsRows.map((row) => {
+    const projects: Project[] = projectsRows.filter((row) => !RowParsing.text(row.deleted_at)).map((row) => {
       const id = RowParsing.schemaId(row);
       const statusRaw = RowParsing.text(row.status);
       const status: ProjectStatus =
@@ -101,20 +91,7 @@ export class ProjectService {
       };
     });
 
-    // Filtro por categoría
-    const filtered = projects.filter((p) => {
-      if (!category || category === ProjectService.ALL_CATEGORIES) return true;
-      return p.categories.includes(category);
-    });
-
-    // Ordenar: más recientes primero
-    filtered.sort((a, b) => {
-      const timeA = a.createdAt ? a.createdAt.getTime() : 0;
-      const timeB = b.createdAt ? b.createdAt.getTime() : 0;
-      return timeB - timeA;
-    });
-
-    return filtered;
+    return projects;
   }
 
   async fetchProjectById(projectId: string): Promise<Project | null> {
@@ -124,6 +101,7 @@ export class ProjectService {
     if (rows.length === 0) return null;
 
     const row = rows[0];
+    if (RowParsing.text(row.deleted_at)) return null;
     const id = RowParsing.schemaId(row);
 
     const [categoriesMap, projCategoriesRows, skillsMap, projSkillsRows] =
@@ -168,9 +146,7 @@ export class ProjectService {
     };
   }
 
-  async createProject(draft: ProjectDraft, creator: RobleUser): Promise<Project> {
-    await this.profiles.ensureProfile(creator);
-
+  async saveProject(draft: ProjectDraft, creator: RobleUser): Promise<Project> {
     const id = generateUuidV4();
     const gradients = draft.gradientColors || this.getRandomGradient(id);
 
@@ -242,6 +218,19 @@ export class ProjectService {
     };
   }
 
+  async saveProjectEdit(recordId: string, draft: ProjectEdit): Promise<void> {
+    await this.db.update('projects', recordId, {
+      title: draft.title,
+      description: draft.description,
+      total_spots: draft.totalSpots,
+      updated_at: new Date().toISOString(),
+    });
+  }
+
+  async archiveProject(recordId: string): Promise<void> {
+    await this.db.update('projects', recordId, { deleted_at: new Date().toISOString() });
+  }
+
   async updateProjectStatus(
     projectRecordId: string,
     status: ProjectStatus
@@ -285,37 +274,8 @@ export class ProjectService {
     }
   }
 
-  async publishUpdate(params: {
-    projectId: string;
-    author: RobleUser;
-    title: string;
-    body: string;
-    newStatus?: ProjectStatus | null;
-    projectRecordId?: string;
-  }): Promise<ProjectUpdate> {
-    const { projectId, author, title, body, newStatus, projectRecordId } = params;
-    const project = await this.fetchProjectById(projectId);
-    if (!project) {
-      throw new ValidationFailure('No se encontró el proyecto.');
-    }
-
-    const isCreator = project.creatorId === author.id;
-    const isAcceptedMember =
-      !isCreator &&
-      (await this.fetchTeamMembers(project)).some(
-        (member) => member.userId === author.id && !member.isCreator,
-      );
-    if (!isCreator && !isAcceptedMember) {
-      throw new ValidationFailure(
-        'Solo el líder o los colaboradores aceptados pueden publicar actualizaciones.',
-      );
-    }
-    if (newStatus && !isCreator) {
-      throw new ValidationFailure(
-        'Solo el líder puede cambiar el estado del proyecto.',
-      );
-    }
-
+  async saveUpdate(params: PublishUpdateInput): Promise<ProjectUpdate> {
+    const { projectId, author, title, body, newStatus } = params;
     const id = generateUuidV4();
     const now = new Date();
 
@@ -331,10 +291,6 @@ export class ProjectService {
     };
 
     const inserted = await this.db.insert<Record<string, unknown>>('project_updates', data);
-
-    if (newStatus && projectRecordId) {
-      await this.updateProjectStatus(projectRecordId, newStatus);
-    }
 
     return {
       id,
@@ -449,5 +405,3 @@ export class ProjectService {
     return map;
   }
 }
-
-export const projectService = ProjectService.getInstance();

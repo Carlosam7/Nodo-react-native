@@ -2,10 +2,17 @@ import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 
+import { projects, applicants, chat } from "@/core/composition/services";
+import { ServicesProvider } from "@/core/presentation/services-context";
+
+import { authService } from "@/features/auth/infrastructure/auth-composition";
 import { AuthProvider, useAuth } from "@/features/auth/context/auth-context";
 
 SplashScreen.preventAutoHideAsync();
+
+const services = { projects, applicants, chat };
 
 function RootStack() {
   const { isBootstrapped } = useAuth();
@@ -28,8 +35,12 @@ function RootStack() {
 
 export default function RootLayout() {
   return (
-    <AuthProvider>
-      <RootStack />
-    </AuthProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ServicesProvider services={services}>
+        <AuthProvider authService={authService}>
+          <RootStack />
+        </AuthProvider>
+      </ServicesProvider>
+    </GestureHandlerRootView>
   );
 }

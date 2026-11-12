@@ -1,4 +1,5 @@
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { LineIcon } from "@/components/ui/line-icon";
+import { Pressable, StyleSheet, TextInput, View } from "react-native";
 
 import { NodoColors } from "@/core/theme/colors";
 
@@ -15,7 +16,7 @@ export function SearchBar({
 }: SearchBarProps) {
   return (
     <View style={styles.container}>
-      <Text style={styles.searchIcon}>🔍</Text>
+      <View style={{ marginRight: 8 }}><LineIcon name="search-1" size={19} color={NodoColors.textMuted} /></View>
       <TextInput
         style={styles.input}
         value={value}
@@ -32,7 +33,7 @@ export function SearchBar({
           accessibilityRole="button"
           accessibilityLabel="Limpiar búsqueda"
         >
-          <Text style={styles.clearText}>✕</Text>
+          <LineIcon name="xmark" size={16} color={NodoColors.textMuted} />
         </Pressable>
       ) : null}
     </View>

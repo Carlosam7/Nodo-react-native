@@ -24,6 +24,12 @@ export interface ProjectDraft {
   gradientColors?: string[];
 }
 
+export interface ProjectEdit {
+  title: string;
+  description: string;
+  totalSpots: number;
+}
+
 export interface TeamMember {
   userId: string;
   name: string;

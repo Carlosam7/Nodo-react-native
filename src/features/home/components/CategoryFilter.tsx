@@ -1,4 +1,6 @@
-import { Pressable, ScrollView, StyleSheet, Text } from "react-native";
+import { LayoutAnimation, Platform, Pressable, ScrollView, StyleSheet, Text } from "react-native";
+
+import * as Haptics from "expo-haptics";
 
 import { NodoColors } from "@/core/theme/colors";
 
@@ -25,7 +27,12 @@ export function CategoryFilter({
         return (
           <Pressable
             key={cat}
-            onPress={() => onSelectCategory(cat)}
+            onPress={() => {
+              if (cat === selectedCategory) return;
+              LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+              if (Platform.OS !== "web") void Haptics.selectionAsync().catch(() => {});
+              onSelectCategory(cat);
+            }}
             style={({ pressed }) => [
               styles.chip,
               isSelected ? styles.chipSelected : styles.chipUnselected,
@@ -53,15 +60,21 @@ export function CategoryFilter({
 
 const styles = StyleSheet.create({
   container: {
-    maxHeight: 46,
-    marginBottom: 12,
+    flexGrow: 0,
+    flexShrink: 0,
+    minHeight: 52,
+    marginBottom: 16,
   },
   scrollContent: {
     paddingHorizontal: 20,
+    paddingVertical: 4,
     gap: 8,
     alignItems: "center",
   },
   chip: {
+    flexShrink: 0,
+    minHeight: 40,
+    justifyContent: "center",
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,

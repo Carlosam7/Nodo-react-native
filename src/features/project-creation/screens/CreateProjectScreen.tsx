@@ -1,8 +1,8 @@
+import { LineIcon } from "@/components/ui/line-icon";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -17,9 +17,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { friendlyErrorMessage } from "@/core/errors/failures";
 import { NodoColors } from "@/core/theme/colors";
 import { useAuth } from "@/features/auth/context/auth-context";
-import { projectService } from "@/features/projects/services/project-service";
+import { useServices } from "@/core/presentation/services-context";
 
 export function CreateProjectScreen() {
+  const { projects: projectService } = useServices();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { signedInUser, isPublicSession } = useAuth();
@@ -40,18 +41,26 @@ export function CreateProjectScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const goBack = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace("/");
+  };
+
   useEffect(() => {
     projectService.fetchCategories().then((cats) => {
       setAvailableCategories(cats.filter((c) => c !== "TODAS"));
     });
-  }, []);
+  }, [projectService]);
 
   // Si está en sesión pública, mostrar pantalla de bienvenida / login prompt
   if (isPublicSession || !signedInUser) {
     return (
       <View style={[styles.guestContainer, { paddingTop: insets.top + 40 }]}>
+        <Pressable onPress={goBack} accessibilityRole="button" accessibilityLabel="Volver">
+          <Text style={styles.backText}>← Volver</Text>
+        </Pressable>
         <View style={styles.guestCard}>
-          <Text style={styles.guestIcon}>✨</Text>
+          <LineIcon name="bulb-2" size={42} color={NodoColors.primary} />
           <Text style={styles.guestTitle}>Publica tu iniciativa</Text>
           <Text style={styles.guestSubtitle}>
             Para crear proyectos, reclutar colaboradores y formar equipos
@@ -108,24 +117,9 @@ export function CreateProjectScreen() {
   const handleSubmit = async () => {
     setError(null);
 
-    if (title.trim().length < 3) {
-      setError("El título debe tener al menos 3 caracteres.");
-      return;
-    }
-    if (description.trim().length < 10) {
-      setError("La descripción debe tener al menos 10 caracteres.");
-      return;
-    }
-    if (selectedCategories.length === 0) {
-      setError(
-        "Selecciona al menos una categoría para clasificar tu iniciativa.",
-      );
-      return;
-    }
-
     setIsSubmitting(true);
     try {
-      const created = await projectService.createProject(
+      await projectService.createProject(
         {
           title,
           description,
@@ -137,26 +131,7 @@ export function CreateProjectScreen() {
         signedInUser,
       );
 
-      Alert.alert(
-        "¡Iniciativa publicada!",
-        "Tu proyecto ya está disponible en el catálogo de exploración.",
-        [
-          {
-            text: "Ver proyecto",
-            onPress: () => {
-              // Limpiar formulario y navegar al proyecto
-              setTitle("");
-              setDescription("");
-              setSelectedCategories([]);
-              setSelectedSkills([]);
-              router.push({
-                pathname: "/project/[id]",
-                params: { id: created.id },
-              });
-            },
-          },
-        ],
-      );
+      router.replace({ pathname: "/", params: { published: "1" } });
     } catch (err) {
       setError(friendlyErrorMessage(err));
     } finally {
@@ -178,18 +153,15 @@ export function CreateProjectScreen() {
       >
         {/* Cabecera */}
         <View style={styles.header}>
+          <Pressable onPress={goBack} disabled={isSubmitting} accessibilityRole="button" accessibilityLabel="Volver">
+            <Text style={styles.backText}>← Volver</Text>
+          </Pressable>
           <Text style={styles.headerTitle}>Crear nueva iniciativa</Text>
           <Text style={styles.headerSubtitle}>
             Define los cupos y competencias que necesitas para consolidar tu
             equipo
           </Text>
         </View>
-
-        {error ? (
-          <View style={styles.errorBanner}>
-            <Text style={styles.errorText}>{error}</Text>
-          </View>
-        ) : null}
 
         <View style={styles.formCard}>
           {/* Título */}
@@ -365,6 +337,11 @@ export function CreateProjectScreen() {
           </View>
 
           {/* Botón de Publicación */}
+          {error ? (
+            <View style={styles.errorBanner} accessibilityRole="alert">
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          ) : null}
           <Pressable
             onPress={handleSubmit}
             disabled={isSubmitting}
@@ -377,7 +354,7 @@ export function CreateProjectScreen() {
             {isSubmitting ? (
               <ActivityIndicator color="#FFFFFF" size="small" />
             ) : (
-              <Text style={styles.submitBtnText}>Publicar iniciativa 🚀</Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}><LineIcon name="rocket-5" size={19} color="#FFFFFF" /><Text style={styles.submitBtnText}>Publicar iniciativa</Text></View>
             )}
           </Pressable>
         </View>
@@ -440,6 +417,12 @@ const styles = StyleSheet.create({
   },
   header: {
     marginBottom: 18,
+  },
+  backText: {
+    color: NodoColors.primary,
+    fontSize: 15,
+    fontWeight: "700",
+    paddingVertical: 10,
   },
   headerTitle: {
     fontSize: 22,

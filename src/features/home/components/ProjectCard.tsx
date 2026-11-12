@@ -1,3 +1,5 @@
+import { TactilePressable } from "@/components/ui/tactile-pressable";
+import { LineIcon } from "@/components/ui/line-icon";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { NodoColors } from "@/core/theme/colors";
@@ -6,9 +8,11 @@ import { Project } from "@/features/projects/types/project";
 interface ProjectCardProps {
   project: Project;
   onPress: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
 }
 
-export function ProjectCard({ project, onPress }: ProjectCardProps) {
+export function ProjectCard({ project, onPress, onEdit, onDelete }: ProjectCardProps) {
   const availableSpots = Math.max(0, project.totalSpots - project.filledSpots);
   const isFull = availableSpots === 0;
 
@@ -23,12 +27,13 @@ export function ProjectCard({ project, onPress }: ProjectCardProps) {
   const primaryColor = project.gradientColors[0] || NodoColors.primary;
 
   return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
-      accessibilityRole="button"
-      accessibilityLabel={`Proyecto ${project.title}`}
-    >
+    <View style={styles.card}>
+      <TactilePressable
+        onPress={onPress}
+        style={({ pressed }) => pressed && styles.cardPressed}
+        accessibilityRole="button"
+        accessibilityLabel={`Proyecto ${project.title}`}
+      >
       {/* Barra superior con color identitario del proyecto */}
       <View style={[styles.colorBar, { backgroundColor: primaryColor }]} />
 
@@ -98,7 +103,28 @@ export function ProjectCard({ project, onPress }: ProjectCardProps) {
           ) : null}
         </View>
       </View>
-    </Pressable>
+      </TactilePressable>
+      {onEdit || onDelete ? (
+        <View style={styles.footer}>
+          {onEdit ? <Pressable
+            onPress={onEdit}
+            accessibilityRole="button"
+            accessibilityLabel={`Editar ${project.title}`}
+            style={({ pressed }) => [styles.editButton, pressed && styles.cardPressed]}
+          >
+            <LineIcon name="pencil-1" size={16} color={NodoColors.primary} /><Text style={styles.editText}>Editar</Text>
+          </Pressable> : null}
+          {onDelete ? <Pressable
+            onPress={onDelete}
+            accessibilityRole="button"
+            accessibilityLabel={`Eliminar ${project.title}`}
+            style={({ pressed }) => [styles.editButton, pressed && styles.cardPressed]}
+          >
+            <LineIcon name="trash-3" size={16} color="#B91C1C" /><Text style={styles.deleteText}>Eliminar</Text>
+          </Pressable> : null}
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -128,6 +154,17 @@ const styles = StyleSheet.create({
   cardContent: {
     padding: 18,
   },
+  footer: {
+    borderTopWidth: 1,
+    borderTopColor: NodoColors.border,
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    paddingHorizontal: 14,
+    paddingVertical: 4,
+  },
+  editButton: { paddingHorizontal: 8, paddingVertical: 10, flexDirection: "row", alignItems: "center", gap: 5 },
+  editText: { color: NodoColors.primary, fontSize: 13, fontWeight: "700" },
+  deleteText: { color: "#B91C1C", fontSize: 13, fontWeight: "700" },
   metaRow: {
     flexDirection: "row",
     justifyContent: "space-between",

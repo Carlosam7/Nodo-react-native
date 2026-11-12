@@ -1,7 +1,8 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Modal,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -12,21 +13,16 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { NodoColors } from "@/core/theme/colors";
-import { applicantService } from "@/features/applicants/services/applicant-service";
-import { Applicant } from "@/features/applicants/types/applicant";
+import { useServices } from "@/core/presentation/services-context";
 import { useAuth } from "@/features/auth/context/auth-context";
 import { ProjectCard } from "@/features/home/components/ProjectCard";
-import { projectService } from "@/features/projects/services/project-service";
 import { Project } from "@/features/projects/types/project";
+import { loadProfileProjects, JoinedProject } from "../application/load-profile-projects";
 
 type ProfileTab = "created" | "joined";
 
-interface JoinedProject {
-  project: Project;
-  application: Applicant | null;
-}
-
 export function ProfileScreen() {
+  const { projects: projectService, applicants: applicantService } = useServices();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { signedInUser, isPublicSession, logout } = useAuth();
@@ -36,42 +32,19 @@ export function ProfileScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const deleteBusy = useRef(false);
 
   const loadData = useCallback(async () => {
     if (!signedInUser) return;
 
     setError(null);
     try {
-      const [allProjects, applications] = await Promise.all([
-        projectService.fetchProjects(),
-        applicantService.fetchMyApplications(signedInUser.id),
-      ]);
-      const ownedProjects = allProjects.filter(
-        (project) => project.creatorId === signedInUser.id,
-      );
-      const relevantApplications = applications.filter(
-        (application) =>
-          application.status === "accepted" || application.status === "pending",
-      );
-      const membershipItems = await Promise.all(
-        relevantApplications.map(async (application) => {
-          const project = await projectService.fetchProjectById(
-            application.projectId,
-          );
-          return project
-            ? {
-                project,
-                application:
-                  application.status === "pending" ? application : null,
-              }
-            : null;
-        }),
-      );
-
-      setCreatedProjects(ownedProjects);
-      setJoinedProjects(
-        membershipItems.filter((item): item is JoinedProject => item !== null),
-      );
+      const result = await loadProfileProjects(signedInUser.id, projectService, applicantService);
+      setCreatedProjects(result.createdProjects);
+      setJoinedProjects(result.joinedProjects);
     } catch (loadError) {
       console.warn("Error al cargar perfil:", loadError);
       setError("No fue posible cargar tus iniciativas. Intenta nuevamente.");
@@ -79,7 +52,7 @@ export function ProfileScreen() {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [signedInUser]);
+  }, [signedInUser, projectService, applicantService]);
 
   useFocusEffect(
     useCallback(() => {
@@ -101,6 +74,23 @@ export function ProfileScreen() {
     void loadData();
   };
 
+  const confirmDelete = async () => {
+    if (!projectToDelete || !signedInUser || deleteBusy.current) return;
+    deleteBusy.current = true;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await projectService.archiveProject(projectToDelete.id, signedInUser);
+      setCreatedProjects((previous) => previous.filter((project) => project.id !== projectToDelete.id));
+      setProjectToDelete(null);
+    } catch {
+      setDeleteError("No se pudo eliminar el proyecto. Intenta nuevamente.");
+    } finally {
+      deleteBusy.current = false;
+      setDeleting(false);
+    }
+  };
+
   const displayedProjects: JoinedProject[] =
     activeTab === "created"
       ? createdProjects.map((project) => ({ project, application: null }))
@@ -110,7 +100,7 @@ export function ProfileScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <Pressable
-          onPress={() => router.back()}
+          onPress={() => router.canGoBack() ? router.back() : router.replace("/")}
           style={styles.backButton}
           accessibilityRole="button"
           accessibilityLabel="Volver"
@@ -174,6 +164,8 @@ export function ProfileScreen() {
                   onPress={() =>
                     router.push({ pathname: "/project/[id]", params: { id: item.project.id } })
                   }
+                  onEdit={activeTab === "created" ? () => router.push({ pathname: "/edit-project/[id]", params: { id: item.project.id } }) : undefined}
+                  onDelete={activeTab === "created" ? () => { setDeleteError(null); setProjectToDelete(item.project); } : undefined}
                 />
               </View>
             );
@@ -195,6 +187,23 @@ export function ProfileScreen() {
           }
         />
       )}
+      <Modal visible={Boolean(projectToDelete)} transparent animationType="fade" onRequestClose={() => { if (!deleting) setProjectToDelete(null); }}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>¿Eliminar proyecto?</Text>
+            <Text style={styles.modalDescription}>“{projectToDelete?.title}” dejará de aparecer en la app. Sus datos, postulaciones y avances se conservarán en Roble.</Text>
+            {deleteError ? <Text style={styles.modalError} accessibilityRole="alert">{deleteError}</Text> : null}
+            <View style={styles.modalActions}>
+              <Pressable onPress={() => setProjectToDelete(null)} disabled={deleting} accessibilityRole="button" style={styles.cancelAction}>
+                <Text style={styles.cancelText}>Cancelar</Text>
+              </Pressable>
+              <Pressable onPress={confirmDelete} disabled={deleting} accessibilityRole="button" style={[styles.deleteAction, deleting && { opacity: 0.6 }]}>
+                {deleting ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.deleteText}>Eliminar</Text>}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -219,6 +228,16 @@ function ProfileTabButton({ label, isActive, onPress }: ProfileTabButtonProps) {
 }
 
 const styles = StyleSheet.create({
+  modalBackdrop: { flex: 1, justifyContent: "center", padding: 24, backgroundColor: "rgba(0,0,0,0.45)" },
+  modalCard: { backgroundColor: NodoColors.surface, borderRadius: 20, padding: 22, width: "100%", maxWidth: 420, alignSelf: "center" },
+  modalTitle: { color: NodoColors.textPrimary, fontSize: 19, fontWeight: "800", marginBottom: 10 },
+  modalDescription: { color: NodoColors.textSecondary, fontSize: 14, lineHeight: 21 },
+  modalError: { color: "#B91C1C", marginTop: 12 },
+  modalActions: { flexDirection: "row", justifyContent: "flex-end", gap: 10, marginTop: 20 },
+  cancelAction: { paddingHorizontal: 16, paddingVertical: 11, borderRadius: 10, backgroundColor: NodoColors.background },
+  cancelText: { color: NodoColors.textPrimary, fontWeight: "700" },
+  deleteAction: { paddingHorizontal: 16, paddingVertical: 11, borderRadius: 10, backgroundColor: "#B91C1C", minWidth: 90, alignItems: "center" },
+  deleteText: { color: "#fff", fontWeight: "700" },
   container: { flex: 1, backgroundColor: NodoColors.background },
   header: {
     flexDirection: "row",

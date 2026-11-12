@@ -1,19 +1,11 @@
-import { RobleClient, roble, RobleUser } from '../db/roble-client';
+import type { User as RobleUser } from "@/features/auth/domain/user";
+import type { Database } from "@/core/domain/database";
 import { generateUuidV4 } from '../utils/uuid';
 
 export class UserProfileService {
-  private static instance: UserProfileService | null = null;
-
-  static getInstance(db: RobleClient = roble): UserProfileService {
-    if (!this.instance) {
-      this.instance = new UserProfileService(db);
-    }
-    return this.instance;
-  }
-
   private readonly confirmedIds = new Set<string>();
 
-  constructor(private readonly database: RobleClient = roble) {}
+  constructor(private readonly database: Database) {}
 
   /**
    * Garantiza que la cuenta autenticada tenga su fila correspondiente en la tabla `users`,
@@ -41,8 +33,16 @@ export class UserProfileService {
       });
 
       this.confirmedIds.add(user.id);
-    } catch {
-      // Si falla la inserción pero el usuario ya existía concurrentemente:
+    } catch (error) {
+      // Una inserción concurrente puede haber creado el perfil; verificarlo.
+      let exists = false;
+      try {
+        const rows = await this.database.read<Record<string, unknown>>('users', { id: user.id });
+        exists = rows.length > 0;
+      } catch {
+        // Conservar el error original cuando no se puede comprobar el perfil.
+      }
+      if (!exists) throw error;
       this.confirmedIds.add(user.id);
     }
   }
@@ -64,5 +64,3 @@ export class UserProfileService {
     return `${base}_${generateUuidV4().substring(0, 6)}`;
   }
 }
-
-export const userProfileService = UserProfileService.getInstance();

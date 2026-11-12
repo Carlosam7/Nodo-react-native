@@ -1,8 +1,6 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -14,11 +12,9 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { friendlyErrorMessage } from "@/core/errors/failures";
 import { NodoColors } from "@/core/theme/colors";
-import { useAuth } from "@/features/auth/context/auth-context";
-import { projectService } from "@/features/projects/services/project-service";
-import { Project, ProjectStatus, TeamMember } from "@/features/projects/types/project";
+import type { ProjectStatus } from "@/features/projects/types/project";
+import { usePublishUpdate } from "../hooks/usePublishUpdate";
 
 const STATUS_OPTIONS: { value: ProjectStatus; label: string }[] = [
   { value: "idea", label: "Idea" },
@@ -30,61 +26,13 @@ export function PublishUpdateScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
-  const { signedInUser } = useAuth();
-
-  const [project, setProject] = useState<Project | null>(null);
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
-  const [newStatus, setNewStatus] = useState<ProjectStatus | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!id) return;
-    projectService
-      .fetchProjectById(id)
-      .then(async (loadedProject) => {
-        setProject(loadedProject);
-        if (loadedProject) {
-          const members = await projectService.fetchTeamMembers(loadedProject);
-          setTeamMembers(members);
-        }
-      })
-      .catch((err) => console.warn("Error al cargar proyecto:", err))
-      .finally(() => setIsLoading(false));
-  }, [id]);
-
+  const { project, title, setTitle, body, setBody, newStatus, setNewStatus, isLoading, isSubmitting, loadError, error, isCreator, isMember, submit } = usePublishUpdate(id);
+  const back = () => router.canGoBack() ? router.back() : router.replace("/");
   const handleSubmit = async () => {
-    setError(null);
-    if (!title.trim() || !body.trim()) {
-      setError("Completa el título y el contenido de la actualización.");
-      return;
-    }
-    if (!project || !signedInUser) return;
-
-    setIsSubmitting(true);
-    try {
-      await projectService.publishUpdate({
-        projectId: project.id,
-        projectRecordId: project.recordId,
-        author: signedInUser,
-        title,
-        body,
-        newStatus: newStatus && newStatus !== project.status ? newStatus : null,
-      });
-      Alert.alert("¡Actualización publicada!", "Tu equipo ya puede verla.", [
-        { text: "Entendido", onPress: () => router.back() },
-      ]);
-    } catch (err) {
-      setError(friendlyErrorMessage(err));
-    } finally {
-      setIsSubmitting(false);
-    }
+    if (await submit() && project) router.replace({ pathname: "/project/[id]", params: { id: project.id } });
   };
 
-  if (isLoading || !project) {
+  if (isLoading) {
     return (
       <View style={[styles.centered, { paddingTop: insets.top }]}>
         <ActivityIndicator size="large" color={NodoColors.primary} />
@@ -92,10 +40,14 @@ export function PublishUpdateScreen() {
     );
   }
 
-  const isCreator = signedInUser?.id === project.creatorId;
-  const isMember = teamMembers.some(
-    (member) => member.userId === signedInUser?.id && !member.isCreator,
-  );
+  if (!project) {
+    return (
+      <View style={[styles.centered, { paddingTop: insets.top, padding: 24 }]}>
+        <Text style={styles.deniedText}>{loadError || "No se encontró el proyecto."}</Text>
+        <Pressable onPress={back} style={styles.submitBtn}><Text style={styles.submitBtnText}>Volver</Text></Pressable>
+      </View>
+    );
+  }
 
   if (!isCreator && !isMember) {
     return (
@@ -104,7 +56,7 @@ export function PublishUpdateScreen() {
         <Text style={styles.deniedText}>
           Solo el líder o los colaboradores aceptados pueden publicar actualizaciones.
         </Text>
-        <Pressable onPress={() => router.back()} style={styles.submitBtn}>
+        <Pressable onPress={back} style={styles.submitBtn}>
           <Text style={styles.submitBtnText}>Volver</Text>
         </Pressable>
       </View>
@@ -127,7 +79,7 @@ export function PublishUpdateScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.navRow}>
-          <Pressable onPress={() => router.back()} style={styles.backBtn}>
+          <Pressable onPress={back} style={styles.backBtn}>
             <Text style={styles.backBtnText}>←</Text>
           </Pressable>
           <Text style={styles.headerTitle}>Nueva actualización</Text>
