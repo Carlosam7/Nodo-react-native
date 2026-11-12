@@ -1,5 +1,5 @@
-import { useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { LineIcon } from "@/components/ui/line-icon";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   ActivityIndicator,
   FlatList,
@@ -13,76 +13,21 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { NodoColors } from "@/core/theme/colors";
 import { useAuth } from "@/features/auth/context/auth-context";
-import { projectService } from "@/features/projects/services/project-service";
 import { Project } from "@/features/projects/types/project";
 import { CategoryFilter } from "../components/CategoryFilter";
 import { HomeHeader } from "../components/HomeHeader";
+import { PublishedBanner } from "../components/PublishedBanner";
 import { ProjectCard } from "../components/ProjectCard";
 import { SearchBar } from "../components/SearchBar";
+import { useHomeProjects } from "../hooks/useHomeProjects";
 
 export function HomeScreen() {
   const router = useRouter();
+  const { published } = useLocalSearchParams<{ published?: string }>();
   const insets = useSafeAreaInsets();
   const { isPublicSession } = useAuth();
 
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [categories, setCategories] = useState<string[]>(["TODAS"]);
-  const [selectedCategory, setSelectedCategory] = useState<string>("TODAS");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const loadData = useCallback(async (isRefresh = false) => {
-    if (isRefresh) {
-      setIsRefreshing(true);
-    } else {
-      setIsLoading(true);
-    }
-    setError(null);
-
-    try {
-      const [cats, projs] = await Promise.all([
-        projectService.fetchCategories(),
-        projectService.fetchProjects(),
-      ]);
-      setCategories(cats);
-      setProjects(projs);
-    } catch (err) {
-      console.warn("Error al cargar iniciativas:", err);
-      setError(
-        "No se pudieron cargar las iniciativas. Desliza para reintentar.",
-      );
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    // Carga inicial de datos remotos al montar la pantalla
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadData();
-  }, [loadData]);
-
-  // Filtrado compuesto: Categoría + Texto de Búsqueda
-  const filteredProjects = useMemo(() => {
-    return projects.filter((p) => {
-      // 1. Filtro por categoría
-      const matchesCategory =
-        selectedCategory === "TODAS" || p.categories.includes(selectedCategory);
-      if (!matchesCategory) return false;
-
-      // 2. Filtro por texto
-      if (!searchQuery.trim()) return true;
-      const q = searchQuery.toLowerCase().trim();
-      const inTitle = p.title.toLowerCase().includes(q);
-      const inDesc = p.description.toLowerCase().includes(q);
-      const inSkills = p.skills.some((s) => s.toLowerCase().includes(q));
-
-      return inTitle || inDesc || inSkills;
-    });
-  }, [projects, selectedCategory, searchQuery]);
+  const { categories, selectedCategory, setSelectedCategory, searchQuery, setSearchQuery, isLoading, isRefreshing, error, filteredProjects, loadData } = useHomeProjects();
 
   const handleProjectPress = (project: Project) => {
     router.push({
@@ -95,6 +40,10 @@ export function HomeScreen() {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Cabecera de exploración */}
       <HomeHeader />
+
+      {published === "1" ? (
+        <PublishedBanner onDismiss={() => router.setParams({ published: undefined })} />
+      ) : null}
 
       {/* Barra de Búsqueda */}
       <SearchBar value={searchQuery} onChangeText={setSearchQuery} />
@@ -136,7 +85,7 @@ export function HomeScreen() {
           }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyIcon}>💡</Text>
+              <LineIcon name="bulb-2" size={42} color={NodoColors.primary} />
               <Text style={styles.emptyTitle}>
                 {error ? "Error de conexión" : "No hay proyectos"}
               </Text>
@@ -165,6 +114,14 @@ export function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  successBanner: {
+    marginHorizontal: 20,
+    marginBottom: 12,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: "#ECFDF5",
+  },
+  successText: { color: "#047857", fontWeight: "700", textAlign: "center" },
   fab: {
     position: "absolute",
     right: 20,

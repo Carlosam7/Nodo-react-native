@@ -3,12 +3,8 @@
  * y validación de reglas de negocio en la aplicación.
  */
 
-export class ValidationFailure extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'ValidationFailure';
-  }
-}
+import { ValidationFailure } from '../domain/validation-failure';
+export { ValidationFailure } from '../domain/validation-failure';
 
 export class RobleApiException extends Error {
   readonly code?: unknown;

@@ -1,3 +1,4 @@
+import { LineIcon } from "@/components/ui/line-icon";
 import { useRouter } from "expo-router";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 
@@ -6,7 +7,7 @@ import { useAuth } from "@/features/auth/context/auth-context";
 
 export function HomeHeader() {
   const router = useRouter();
-  const { isPublicSession, signedInUser, logout } = useAuth();
+  const { isPublicSession, signedInUser } = useAuth();
 
   const handleNotificationPress = () => {
     // Modo maqueta (stub) conforme al acuerdo del Lienzo de Alineación
@@ -17,11 +18,7 @@ export function HomeHeader() {
     if (isPublicSession) {
       router.push("/auth/login");
     } else {
-      // Aún no existe pantalla de perfil: ofrecer cerrar sesión
-      Alert.alert(signedInUser?.name ?? "Mi cuenta", undefined, [
-        { text: "Cancelar", style: "cancel" },
-        { text: "Cerrar sesión", style: "destructive", onPress: () => logout() },
-      ]);
+      router.push("/profile");
     }
   };
 
@@ -58,7 +55,7 @@ export function HomeHeader() {
             accessibilityRole="button"
             accessibilityLabel="Notificaciones"
           >
-            <Text style={styles.bellIcon}>🔔</Text>
+            <LineIcon name="bell-1" size={21} color={NodoColors.textPrimary} />
             <View style={styles.notificationDot} />
           </Pressable>
 

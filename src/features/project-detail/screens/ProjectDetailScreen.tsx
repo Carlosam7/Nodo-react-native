@@ -1,3 +1,4 @@
+import { LineIcon } from "@/components/ui/line-icon";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -12,10 +13,10 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { NodoColors } from "@/core/theme/colors";
-import { applicantService } from "@/features/applicants/services/applicant-service";
+import { useServices } from "@/core/presentation/services-context";
 import { Applicant } from "@/features/applicants/types/applicant";
 import { useAuth } from "@/features/auth/context/auth-context";
-import { projectService } from "@/features/projects/services/project-service";
+import { loadProjectDetail } from "../application/load-project-detail";
 import {
   Project,
   ProjectUpdate,
@@ -23,6 +24,7 @@ import {
 } from "@/features/projects/types/project";
 
 export function ProjectDetailScreen() {
+  const { projects: projectService, applicants: applicantService } = useServices();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
@@ -36,36 +38,23 @@ export function ProjectDetailScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const loadProjectData = useCallback(async () => {
-    if (!id) return;
+    if (!id) {
+      setIsLoading(false);
+      return;
+    }
     try {
-      const proj = await projectService.fetchProjectById(id);
-      setProject(proj);
-
-      if (proj) {
-        const [members, upds] = await Promise.all([
-          projectService.fetchTeamMembers(proj),
-          projectService.fetchUpdates(proj.id),
-        ]);
-        setTeamMembers(members);
-        setUpdates(upds);
-
-        // Si hay usuario logueado que no sea el creador, verificar si ya se postuló
-        if (signedInUser && signedInUser.id !== proj.creatorId) {
-          const myApps = await applicantService.fetchMyApplications(
-            signedInUser.id,
-          );
-          const currentApp =
-            myApps.find((a) => a.projectId === proj.id) || null;
-          setMyApplication(currentApp);
-        }
-      }
+      const result = await loadProjectDetail(projectService, applicantService, id, signedInUser?.id);
+      setProject(result?.project ?? null);
+      setTeamMembers(result?.members ?? []);
+      setUpdates(result?.updates ?? []);
+      setMyApplication(result?.myApplication ?? null);
     } catch (err) {
       console.warn("Error al cargar detalle del proyecto:", err);
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [id, signedInUser]);
+  }, [id, signedInUser, projectService, applicantService]);
 
   useEffect(() => {
     // Carga inicial de datos remotos al montar la pantalla
@@ -73,11 +62,25 @@ export function ProjectDetailScreen() {
     loadProjectData();
   }, [loadProjectData]);
 
-  if (isLoading || !project) {
+  if (isLoading) {
     return (
       <View style={[styles.centeredContainer, { paddingTop: insets.top }]}>
         <ActivityIndicator size="large" color={NodoColors.primary} />
         <Text style={styles.loadingText}>Cargando proyecto...</Text>
+      </View>
+    );
+  }
+
+  if (!project) {
+    return (
+      <View style={[styles.centeredContainer, { paddingTop: insets.top }]}>
+        <Text style={styles.loadingText}>No se pudo cargar el proyecto.</Text>
+        <Pressable onPress={() => { setIsLoading(true); void loadProjectData(); }} accessibilityRole="button">
+          <Text style={styles.loadingText}>Reintentar</Text>
+        </Pressable>
+        <Pressable onPress={() => router.back()} accessibilityRole="button">
+          <Text style={styles.loadingText}>Volver</Text>
+        </Pressable>
       </View>
     );
   }
@@ -125,6 +128,10 @@ export function ProjectDetailScreen() {
       pathname: "/publish-update/[id]",
       params: { id: project.id },
     });
+  };
+
+  const handleChatPress = () => {
+    router.push({ pathname: "/chat/[id]", params: { id: project.id } });
   };
 
   return (
@@ -256,6 +263,12 @@ export function ProjectDetailScreen() {
             Líder e integrantes admitidos formalmente en la iniciativa
           </Text>
 
+          {isCreator || isMember ? (
+            <Pressable onPress={handleChatPress} style={styles.smallActionBtn} accessibilityRole="button" accessibilityLabel="Abrir chat del equipo">
+              <LineIcon name="chat-bubble-2" size={16} color={NodoColors.primaryDark} /><Text style={styles.smallActionText}>Chat del equipo</Text>
+            </Pressable>
+          ) : null}
+
           <View style={styles.teamList}>
             {teamMembers.map((member) => (
               <View key={member.userId} style={styles.teamMemberRow}>
@@ -268,7 +281,7 @@ export function ProjectDetailScreen() {
                   <Text style={styles.memberName}>{member.name}</Text>
                   <Text style={styles.memberRole}>
                     {member.isCreator
-                      ? "👑 Líder / Creador"
+                      ? "Líder / Creador"
                       : member.program || "Colaborador"}
                   </Text>
                 </View>
@@ -339,7 +352,7 @@ export function ProjectDetailScreen() {
               ]}
             >
               <Text style={styles.primaryBtnText}>
-                Gestionar solicitudes y cupos 👥
+                Gestionar solicitudes y cupos
               </Text>
             </Pressable>
           </View>
@@ -379,7 +392,7 @@ export function ProjectDetailScreen() {
             <Text style={styles.primaryBtnText}>
               {isPublicSession
                 ? "Iniciar sesión para postularme"
-                : "Postularme al equipo 🚀"}
+                : "Postularme al equipo"}
             </Text>
           </Pressable>
         )}
@@ -607,6 +620,7 @@ const styles = StyleSheet.create({
     color: NodoColors.textSecondary,
   },
   smallActionBtn: {
+    flexDirection: "row", alignItems: "center", gap: 6,
     backgroundColor: NodoColors.primaryMuted,
     paddingHorizontal: 10,
     paddingVertical: 5,

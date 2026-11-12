@@ -8,17 +8,9 @@ import {
   RobleApiNotFoundException,
 } from '../errors/failures';
 import { TokenStorage } from './token-storage';
+import type { User as RobleUser } from '@/features/auth/domain/user';
 
-export interface RobleUser {
-  id: string;
-  userId: string;
-  email: string;
-  name: string;
-  avatarUrl?: string | null;
-  role?: string | null;
-  isGuest: boolean;
-  extra?: Record<string, unknown> | null;
-}
+export type { User as RobleUser } from '@/features/auth/domain/user';
 
 export class RobleClient {
   private static instance: RobleClient | null = null;
@@ -38,7 +30,14 @@ export class RobleClient {
   private accessToken: string | null = null;
   private refreshToken: string | null = null;
   private persistTokens = true;
-  private isRefreshing = false;
+  private refreshPromise: Promise<void> | null = null;
+  private sessionVersion = 0;
+  private sessionExpiredListeners = new Set<() => void>();
+
+  subscribeSessionExpired(listener: () => void): () => void {
+    this.sessionExpiredListeners.add(listener);
+    return () => this.sessionExpiredListeners.delete(listener);
+  }
 
   constructor(baseUrl = Env.baseUrl, contractId = Env.contractId) {
     this.baseUrl = baseUrl.replace(/\/+$/, '');
@@ -64,6 +63,8 @@ export class RobleClient {
   // ==========================================
 
   async restoreSession(): Promise<RobleUser | null> {
+    this.sessionVersion++;
+    this.refreshPromise = null;
     try {
       const raw = await TokenStorage.getItem(this.storageKey);
       if (!raw) return null;
@@ -105,6 +106,8 @@ export class RobleClient {
   }
 
   private async clearTokens(): Promise<void> {
+    this.sessionVersion++;
+    this.refreshPromise = null;
     this.accessToken = null;
     this.refreshToken = null;
     await TokenStorage.removeItem(this.storageKey);
@@ -115,6 +118,7 @@ export class RobleClient {
       throw new RobleApiAuthException('No hay token de refresco disponible');
     }
 
+    const version = this.sessionVersion;
     const res = await this.makeRequest<Record<string, unknown>>(
       'POST',
       'refresh-token',
@@ -125,6 +129,9 @@ export class RobleClient {
       }
     );
 
+    if (version !== this.sessionVersion) {
+      throw new RobleApiAuthException('La sesión cambió durante la renovación.');
+    }
     if (res && typeof res.accessToken === 'string') {
       this.accessToken = res.accessToken;
       if (typeof res.refreshToken === 'string') {
@@ -145,6 +152,8 @@ export class RobleClient {
     password: string,
     persistSession = true
   ): Promise<RobleUser> {
+    this.sessionVersion++;
+    this.refreshPromise = null;
     this.persistTokens = persistSession;
 
     const res = await this.makeRequest<Record<string, unknown>>(
@@ -196,6 +205,8 @@ export class RobleClient {
   }
 
   async logout(): Promise<void> {
+    this.sessionVersion++;
+    this.refreshPromise = null;
     try {
       if (this.accessToken) {
         await this.makeRequest('POST', 'logout', { isAuthRequest: true });
@@ -386,10 +397,13 @@ export class RobleClient {
       queryParams?: Record<string, string>;
       isAuthRequest?: boolean;
       skipAuth?: boolean;
+      retried?: boolean;
     }
   ): Promise<T> {
-    const { body, queryParams, isAuthRequest = false, skipAuth = false } =
+    const { body, queryParams, isAuthRequest = false, skipAuth = false, retried = false } =
       options || {};
+    const requestVersion = this.sessionVersion;
+    const requestToken = this.accessToken;
 
     const baseUrl = isAuthRequest ? this.authUrl : this.dataUrl;
     let url = endpoint ? `${baseUrl}/${endpoint}` : baseUrl;
@@ -403,8 +417,8 @@ export class RobleClient {
       'Content-Type': 'application/json',
     };
 
-    if (!skipAuth && this.accessToken) {
-      headers.Authorization = `Bearer ${this.accessToken}`;
+    if (!skipAuth && requestToken) {
+      headers.Authorization = `Bearer ${requestToken}`;
     }
 
     let response: Response;
@@ -418,27 +432,39 @@ export class RobleClient {
       throw new RobleApiNetworkException();
     }
 
-    // Auto-refresh token ante 401 para peticiones autenticadas
-    if (
-      response.status === 401 &&
-      this.refreshToken &&
-      !isAuthRequest &&
-      !skipAuth &&
-      !this.isRefreshing
-    ) {
-      this.isRefreshing = true;
+    if (response.status === 401 && !isAuthRequest && !skipAuth && requestToken) {
+      if (requestVersion !== this.sessionVersion) {
+        throw new RobleApiAuthException('La sesión cambió durante la solicitud.');
+      }
       try {
-        await this.refreshAccessToken();
-        this.isRefreshing = false;
-        // Reintentar la llamada una sola vez
-        return await this.makeRequest<T>(method, endpoint, options);
+        if (retried) throw new RobleApiAuthException('La sesión no es válida.');
+        if (requestToken === this.accessToken) {
+          if (!this.refreshToken) throw new RobleApiAuthException('La sesión expiró.');
+          if (!this.refreshPromise) {
+            const refresh = this.refreshAccessToken();
+            this.refreshPromise = refresh;
+            void refresh.finally(() => {
+              if (this.refreshPromise === refresh) this.refreshPromise = null;
+            }).catch(() => {});
+          }
+          await this.refreshPromise;
+        }
+        if (requestVersion !== this.sessionVersion) {
+          throw new RobleApiAuthException('La sesión cambió durante la solicitud.');
+        }
       } catch (refreshErr) {
-        this.isRefreshing = false;
-        await this.clearTokens();
+        if (!(refreshErr instanceof RobleApiAuthException) && !(refreshErr instanceof RobleApiForbiddenException)) throw refreshErr;
+        if (requestVersion === this.sessionVersion) {
+          await this.clearTokens();
+          if (this.sessionVersion === requestVersion + 1) {
+            this.sessionExpiredListeners.forEach((listener) => listener());
+          }
+        }
         throw new RobleApiAuthException(
           'Sesión expirada y no se pudo renovar: ' + String(refreshErr)
         );
       }
+      return this.makeRequest<T>(method, endpoint, { ...options, retried: true });
     }
 
     let responseData: any = null;

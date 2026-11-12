@@ -7,10 +7,9 @@ import React, {
   useState,
 } from "react";
 
-import { Env } from "@/core/config/env";
-import { roble, RobleUser } from "@/core/db/roble-client";
+import type { User as RobleUser } from "../domain/user";
+import type { AuthOperations } from "../application/auth-service";
 import { friendlyErrorMessage } from "@/core/errors/failures";
-import { userProfileService } from "@/core/services/user-profile-service";
 
 export interface AuthContextValue {
   currentUser: RobleUser | null;
@@ -28,7 +27,7 @@ export interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
+export function AuthProvider({ children, authService }: { children: React.ReactNode; authService: AuthOperations }) {
   const [currentUser, setCurrentUser] = useState<RobleUser | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isBootstrapped, setIsBootstrapped] = useState(false);
@@ -38,7 +37,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!currentUser) return true;
     return (
       currentUser.isGuest ||
-      currentUser.email === Env.guestEmail ||
       currentUser.role === "readonly" ||
       currentUser.role === "anonymous"
     );
@@ -52,15 +50,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setError(null);
   }, []);
 
+  useEffect(() => authService.subscribeSessionExpired(() => {
+    setCurrentUser(null);
+    setError("Tu sesión expiró. Inicia sesión nuevamente.");
+  }), [authService]);
+
   useEffect(() => {
     let isMounted = true;
 
     async function initAuth() {
       try {
-        const restored = await roble.restoreSession();
+        const restored = await authService.restoreSession();
         if (!isMounted) return;
         if (restored) {
-          await userProfileService.ensureProfile(restored);
           if (isMounted) {
             setCurrentUser(restored);
             setIsBootstrapped(true);
@@ -72,7 +74,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        const guest = await roble.signInAsGuest();
+        const guest = await authService.signInAsGuest();
         if (isMounted) {
           setCurrentUser(guest);
         }
@@ -90,15 +92,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [authService]);
 
   const login = useCallback(
     async (email: string, pass: string): Promise<RobleUser> => {
       setError(null);
       setIsLoading(true);
       try {
-        const user = await roble.login(email, pass);
-        await userProfileService.ensureProfile(user);
+        const user = await authService.login(email, pass);
         setCurrentUser(user);
         return user;
       } catch (err) {
@@ -109,7 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setIsLoading(false);
       }
     },
-    [],
+    [authService],
   );
 
   const register = useCallback(
@@ -117,8 +118,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setError(null);
       setIsLoading(true);
       try {
-        const user = await roble.register(email, pass, name);
-        await userProfileService.ensureProfile(user);
+        const user = await authService.register(email, pass, name);
         setCurrentUser(user);
         return user;
       } catch (err) {
@@ -129,31 +129,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setIsLoading(false);
       }
     },
-    [],
+    [authService],
   );
 
   const logout = useCallback(async (): Promise<void> => {
     setIsLoading(true);
     try {
-      await roble.logout();
-      const guest = await roble.signInAsGuest();
+      const guest = await authService.logout();
       setCurrentUser(guest);
     } catch (err) {
       console.warn("Error al cerrar sesión:", err);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [authService]);
 
   const refreshUser = useCallback(async () => {
     if (isPublicSession) return;
     try {
-      const user = await roble.currentUser();
+      const user = await authService.currentUser();
       setCurrentUser(user);
     } catch {
       // Ignorar si falla
     }
-  }, [isPublicSession]);
+  }, [isPublicSession, authService]);
 
   const value = useMemo<AuthContextValue>(
     () => ({

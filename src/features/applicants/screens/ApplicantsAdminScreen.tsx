@@ -1,8 +1,9 @@
+import { LineIcon } from "@/components/ui/line-icon";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
+  Modal,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -14,55 +15,21 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { friendlyErrorMessage } from "@/core/errors/failures";
 import { NodoColors } from "@/core/theme/colors";
-import { applicantService } from "@/features/applicants/services/applicant-service";
-import {
-  Applicant,
-  ApplicantStatus,
-} from "@/features/applicants/types/applicant";
-import { useAuth } from "@/features/auth/context/auth-context";
-import { projectService } from "@/features/projects/services/project-service";
-import { Project, ProjectStatus } from "@/features/projects/types/project";
+import type { Applicant } from "@/features/applicants/types/applicant";
+import type { ProjectStatus } from "@/features/projects/types/project";
+import { useApplicantsAdmin } from "../hooks/useApplicantsAdmin";
 
 export function ApplicantsAdminScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
-  const { signedInUser } = useAuth();
+  const { project, applicants, selectedTab, setSelectedTab, isLoading, isRefreshing, actionInProgressId, canManage, retry, refresh, changeStatus, decide } = useApplicantsAdmin(id);
+  const [pendingStatus, setPendingStatus] = useState<ProjectStatus | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
+  const goBack = () => router.canGoBack() ? router.back() : router.replace("/");
 
-  const [project, setProject] = useState<Project | null>(null);
-  const [applicants, setApplicants] = useState<Applicant[]>([]);
-  const [selectedTab, setSelectedTab] = useState<ApplicantStatus>("pending");
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [actionInProgressId, setActionInProgressId] = useState<string | null>(
-    null,
-  );
-
-  const loadData = useCallback(async () => {
-    if (!id) return;
-    try {
-      const proj = await projectService.fetchProjectById(id);
-      setProject(proj);
-
-      if (proj) {
-        const apps = await applicantService.fetchApplicantsByProject(proj.id);
-        setApplicants(apps);
-      }
-    } catch (err) {
-      console.warn("Error al cargar panel de administración:", err);
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
-    }
-  }, [id]);
-
-  useEffect(() => {
-    // Carga inicial de datos remotos al montar la pantalla
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadData();
-  }, [loadData]);
-
-  if (isLoading || !project) {
+  if (isLoading) {
     return (
       <View style={[styles.centered, { paddingTop: insets.top }]}>
         <ActivityIndicator size="large" color={NodoColors.primary} />
@@ -71,8 +38,22 @@ export function ApplicantsAdminScreen() {
     );
   }
 
+  if (!project) {
+    return (
+      <View style={[styles.centered, { paddingTop: insets.top, padding: 24 }]}>
+        <Text style={styles.errorTitle}>No se pudo cargar el proyecto</Text>
+        <Pressable onPress={retry} style={styles.backActionBtn}>
+          <Text style={styles.backActionText}>Reintentar</Text>
+        </Pressable>
+        <Pressable onPress={goBack} style={styles.backActionBtn}>
+          <Text style={styles.backActionText}>Volver</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
   // Regla: Solo el creador puede acceder
-  if (signedInUser && signedInUser.id !== project.creatorId) {
+  if (!canManage) {
     return (
       <View style={[styles.centered, { paddingTop: insets.top, padding: 24 }]}>
         <Text style={styles.errorTitle}>Acceso denegado</Text>
@@ -80,7 +61,7 @@ export function ApplicantsAdminScreen() {
           Solo el líder o creador de este proyecto tiene permisos para auditar y
           decidir postulaciones.
         </Text>
-        <Pressable onPress={() => router.back()} style={styles.backActionBtn}>
+        <Pressable onPress={goBack} style={styles.backActionBtn}>
           <Text style={styles.backActionText}>Volver</Text>
         </Pressable>
       </View>
@@ -90,66 +71,38 @@ export function ApplicantsAdminScreen() {
   const isFull = project.filledSpots >= project.totalSpots;
 
   const handleStatusChange = (newStatus: ProjectStatus) => {
-    Alert.alert(
-      "Cambiar estado del proyecto",
-      `¿Deseas cambiar el estado a "${newStatus.replace("_", " ").toUpperCase()}"?`,
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Confirmar",
-          onPress: async () => {
-            try {
-              await projectService.updateProjectStatus(
-                project.recordId,
-                newStatus,
-              );
-              setProject((prev) =>
-                prev ? { ...prev, status: newStatus } : null,
-              );
-            } catch (err) {
-              Alert.alert("Error", friendlyErrorMessage(err));
-            }
-          },
-        },
-      ],
-    );
+    setActionError(null);
+    setPendingStatus(newStatus);
+  };
+
+  const confirmStatusChange = async () => {
+    if (!pendingStatus || updatingStatus) return;
+    setUpdatingStatus(true);
+    try {
+      await changeStatus(pendingStatus);
+      setPendingStatus(null);
+    } catch (err) {
+      setActionError(friendlyErrorMessage(err));
+      setPendingStatus(null);
+    } finally {
+      setUpdatingStatus(false);
+    }
   };
 
   const handleDecision = async (
     applicant: Applicant,
     decision: "accepted" | "rejected",
   ) => {
-    if (!signedInUser) return;
-
     if (decision === "accepted" && isFull && applicant.status !== "accepted") {
-      Alert.alert(
-        "Cupo lleno",
-        "No quedan vacantes disponibles en este proyecto. Para admitir un nuevo colaborador debes rechazar a uno previamente aceptado.",
-      );
+      setActionError("No quedan vacantes disponibles. Para admitir a otro colaborador, primero debes rechazar a uno previamente aceptado.");
       return;
     }
 
-    setActionInProgressId(applicant.id);
     try {
-      const { updatedApplicant, updatedFilledSpots } =
-        await applicantService.decideApplication({
-          applicant,
-          project,
-          newStatus: decision,
-          actor: signedInUser,
-        });
-
-      setApplicants((prev) =>
-        prev.map((a) => (a.id === updatedApplicant.id ? updatedApplicant : a)),
-      );
-
-      setProject((prev) =>
-        prev ? { ...prev, filledSpots: updatedFilledSpots } : null,
-      );
+      setActionError(null);
+      await decide(applicant, decision);
     } catch (err) {
-      Alert.alert("Error al gestionar solicitud", friendlyErrorMessage(err));
-    } finally {
-      setActionInProgressId(null);
+      setActionError(friendlyErrorMessage(err));
     }
   };
 
@@ -174,10 +127,7 @@ export function ApplicantsAdminScreen() {
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
-            onRefresh={() => {
-              setIsRefreshing(true);
-              loadData();
-            }}
+            onRefresh={refresh}
             tintColor={NodoColors.primary}
           />
         }
@@ -185,7 +135,7 @@ export function ApplicantsAdminScreen() {
         {/* Cabecera */}
         <View style={styles.navRow}>
           <Pressable
-            onPress={() => router.back()}
+            onPress={goBack}
             style={({ pressed }) => [styles.navBtn, pressed && styles.pressed]}
           >
             <Text style={styles.navBtnText}>←</Text>
@@ -199,6 +149,8 @@ export function ApplicantsAdminScreen() {
             </Text>
           </View>
         </View>
+
+        {actionError ? <Text accessibilityRole="alert" style={styles.actionError}>{actionError}</Text> : null}
 
         {/* Panel de Estado del Proyecto */}
         <View style={styles.card}>
@@ -268,7 +220,7 @@ export function ApplicantsAdminScreen() {
           {isFull ? (
             <View style={styles.capacityWarning}>
               <Text style={styles.capacityWarningText}>
-                ⚠️ Cupo lleno. Al rechazar o liberar cupos podrás aceptar nuevos
+                Cupo lleno. Al rechazar o liberar cupos podrás aceptar nuevos
                 postulantes.
               </Text>
             </View>
@@ -332,7 +284,7 @@ export function ApplicantsAdminScreen() {
         {/* Listado de Solicitudes */}
         {currentList.length === 0 ? (
           <View style={styles.emptyCard}>
-            <Text style={styles.emptyIcon}>📋</Text>
+            <LineIcon name="clipboard" size={42} color={NodoColors.textMuted} />
             <Text style={styles.emptyText}>
               No hay solicitudes en esta sección.
             </Text>
@@ -426,11 +378,29 @@ export function ApplicantsAdminScreen() {
           })
         )}
       </ScrollView>
+      <Modal visible={pendingStatus !== null} transparent animationType="fade" onRequestClose={() => { if (!updatingStatus) setPendingStatus(null); }}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.cardTitle}>Cambiar estado del proyecto</Text>
+            <Text style={styles.modalText}>¿Deseas cambiar el estado a {pendingStatus?.replace("_", " ").toUpperCase()}?</Text>
+            <View style={styles.modalActions}>
+              <Pressable disabled={updatingStatus} onPress={() => setPendingStatus(null)} style={styles.modalButton}><Text>Cancelar</Text></Pressable>
+              <Pressable disabled={updatingStatus} onPress={confirmStatusChange} style={styles.modalButton}><Text>{updatingStatus ? "Guardando..." : "Confirmar"}</Text></Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  actionError: { color: "#a31515", marginBottom: 16 },
+  modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "center", padding: 24 },
+  modalCard: { backgroundColor: "#fff", borderRadius: 16, padding: 20 },
+  modalText: { marginTop: 12, color: "#333" },
+  modalActions: { flexDirection: "row", justifyContent: "flex-end", gap: 12, marginTop: 20 },
+  modalButton: { padding: 12 },
   container: {
     flex: 1,
     backgroundColor: NodoColors.background,

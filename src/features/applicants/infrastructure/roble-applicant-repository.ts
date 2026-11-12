@@ -1,19 +1,8 @@
-import { roble, RobleClient, RobleUser } from "@/core/db/roble-client";
+import type { User as RobleUser } from "@/features/auth/domain/user";
+import type { Database } from "@/core/domain/database";
 import { RowParsing } from "@/core/db/row-parsing";
-import { ValidationFailure } from "@/core/errors/failures";
-import {
-  catalogService,
-  CatalogService,
-} from "@/core/services/catalog-service";
-import {
-  userProfileService,
-  UserProfileService,
-} from "@/core/services/user-profile-service";
+import type { CatalogRepository } from "@/core/application/repositories";
 import { generateUuidV4 } from "@/core/utils/uuid";
-import {
-  projectService,
-  ProjectService,
-} from "@/features/projects/services/project-service";
 import { Project } from "@/features/projects/types/project";
 import {
   Applicant,
@@ -21,21 +10,10 @@ import {
   ApplicationDraft,
 } from "../types/applicant";
 
-export class ApplicantService {
-  private static instance: ApplicantService | null = null;
-
-  static getInstance(): ApplicantService {
-    if (!this.instance) {
-      this.instance = new ApplicantService();
-    }
-    return this.instance;
-  }
-
+export class RobleApplicantRepository {
   constructor(
-    private readonly db: RobleClient = roble,
-    private readonly catalog: CatalogService = catalogService,
-    private readonly profiles: UserProfileService = userProfileService,
-    private readonly projects: ProjectService = projectService,
+    private readonly db: Database,
+    private readonly catalog: CatalogRepository,
   ) {}
 
   async fetchApplicantsByProject(projectId: string): Promise<Applicant[]> {
@@ -54,50 +32,11 @@ export class ApplicantService {
     return apps;
   }
 
-  async fetchMyJoinedProjects(userId: string): Promise<Project[]> {
-    const myApps = await this.fetchMyApplications(userId);
-    const acceptedApps = myApps.filter((a) => a.status === "accepted");
-
-    const projectPromises = acceptedApps.map((a) =>
-      this.projects.fetchProjectById(a.projectId),
-    );
-    const results = await Promise.all(projectPromises);
-    return results.filter((p): p is Project => p !== null);
+  async hasApplication(projectId: string, applicantId: string): Promise<boolean> {
+    return (await this.db.read("applications", { project_id: projectId, applicant_id: applicantId })).length > 0;
   }
 
-  async submitApplication(
-    draft: ApplicationDraft,
-    applicant: RobleUser,
-    project: Project,
-  ): Promise<Applicant> {
-    // 1. Regla: Restricción de auto-postulación
-    if (project.creatorId === applicant.id) {
-      throw new ValidationFailure("No puedes postularte a tu propio proyecto.");
-    }
-
-    // 2. Regla: Restricción de capacidad (Cupo lleno)
-    if (project.filledSpots >= project.totalSpots) {
-      throw new ValidationFailure(
-        "El proyecto ya cubrió la totalidad de sus cupos disponibles.",
-      );
-    }
-
-    // 3. Regla: Control contra postulaciones redundantes
-    const existing = await this.db.read<Record<string, unknown>>(
-      "applications",
-      {
-        project_id: project.id,
-        applicant_id: applicant.id,
-      },
-    );
-    if (existing.length > 0) {
-      throw new ValidationFailure(
-        "Ya tienes una postulación registrada para esta iniciativa.",
-      );
-    }
-
-    await this.profiles.ensureProfile(applicant);
-
+  async saveApplication(draft: ApplicationDraft, applicant: RobleUser, project: Project): Promise<Applicant> {
     const id = generateUuidV4();
     const now = new Date();
 
@@ -138,58 +77,12 @@ export class ApplicantService {
     };
   }
 
-  async decideApplication(params: {
-    applicant: Applicant;
-    project: Project;
-    newStatus: "accepted" | "rejected";
-    actor: RobleUser;
-  }): Promise<{ updatedApplicant: Applicant; updatedFilledSpots: number }> {
-    const { applicant, project, newStatus, actor } = params;
+  async updateApplicationStatus(recordId: string, status: "accepted" | "rejected"): Promise<void> {
+    await this.db.update("applications", recordId, { status });
+  }
 
-    // Regla: Matriz de permisos asimétrica (solo el creador decide)
-    if (project.creatorId !== actor.id) {
-      throw new ValidationFailure(
-        "Solo el líder o creador del proyecto tiene permiso para gestionar postulantes.",
-      );
-    }
-
-    let nextSpots = project.filledSpots;
-
-    if (newStatus === "accepted") {
-      if (applicant.status !== "accepted") {
-        if (project.filledSpots >= project.totalSpots) {
-          throw new ValidationFailure(
-            "El cupo de colaboradores ya está completo. No es posible admitir nuevos postulantes.",
-          );
-        }
-        nextSpots += 1;
-      }
-    } else if (newStatus === "rejected") {
-      if (applicant.status === "accepted") {
-        nextSpots = Math.max(0, nextSpots - 1);
-      }
-    }
-
-    // Actualizar estado de la solicitud en applications
-    await this.db.update("applications", applicant.recordId, {
-      status: newStatus,
-    });
-
-    // Actualizar cupos en projects si hubo cambio
-    if (nextSpots !== project.filledSpots) {
-      await this.db.update("projects", project.recordId, {
-        filled_spots: nextSpots,
-        updated_at: new Date().toISOString(),
-      });
-    }
-
-    return {
-      updatedApplicant: {
-        ...applicant,
-        status: newStatus,
-      },
-      updatedFilledSpots: nextSpots,
-    };
+  async updateProjectSpots(recordId: string, filledSpots: number): Promise<void> {
+    await this.db.update("projects", recordId, { filled_spots: filledSpots, updated_at: new Date().toISOString() });
   }
 
   private async linkUserSkills(
@@ -296,5 +189,3 @@ export class ApplicantService {
     }
   }
 }
-
-export const applicantService = ApplicantService.getInstance();
