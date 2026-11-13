@@ -2,7 +2,7 @@
 
 ## Demo de migración Flutter → React Native
 
-Video demostrativo de la migración: [Ver demo en YouTube](TU_LINK_DE_YOUTUBE)
+Video demostrativo de la migración: [Ver demo en YouTube](https://youtu.be/kWH3qlGzkGY)
 
 > Reemplaza `https://youtu.be/kWH3qlGzkGY` por el enlace del video antes de entregar el repositorio.
 
