@@ -21,7 +21,44 @@ Module._extensions['.ts'] = (module, filename) => {
   module._compile(result.outputText, filename);
 };
 const { RobleClient } = require('../src/core/db/roble-client.ts');
+const { TokenStorage } = require('../src/core/db/token-storage.ts');
 const response = (status, value) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } });
+
+test('la sesión web migra de localStorage a cookies y se elimina al cerrar sesión', async () => {
+  const cookies = new Map();
+  const legacy = new Map([['roble.session.cookies', JSON.stringify({ accessToken: 'old', refreshToken: 'refresh' })]]);
+  const writes = [];
+  global.window = { location: { protocol: 'https:' }, localStorage: {
+    getItem: (key) => legacy.get(key) ?? null,
+    removeItem: (key) => legacy.delete(key),
+  } };
+  global.document = {
+    get cookie() { return [...cookies].map(([key, value]) => `${key}=${value}`).join('; '); },
+    set cookie(value) {
+      writes.push(value);
+      const [pair, ...attributes] = value.split('; ');
+      const index = pair.indexOf('=');
+      const key = pair.slice(0, index);
+      if (attributes.includes('Max-Age=0')) cookies.delete(key);
+      else cookies.set(key, pair.slice(index + 1));
+    },
+  };
+  const mock = mockBackend();
+  try {
+    const client = new RobleClient('https://example.test', 'cookies');
+    assert.ok(await client.restoreSession());
+    assert.equal(legacy.size, 0);
+    assert.match(writes[0], /SameSite=Strict; Secure/);
+    assert.equal(JSON.parse(await TokenStorage.getItem('roble.session.cookies')).refreshToken, 'refresh2');
+    await client.logout();
+    assert.equal(cookies.size, 0);
+    assert.equal(await TokenStorage.getItem('roble.session.cookies'), null);
+  } finally {
+    mock.restore();
+    delete global.window;
+    delete global.document;
+  }
+});
 
 function mockBackend(options = {}) {
   const counts = { refresh: 0, reads: 0 };

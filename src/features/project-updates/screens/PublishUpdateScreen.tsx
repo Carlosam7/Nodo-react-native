@@ -1,3 +1,4 @@
+import { LineIcon } from "@/components/ui/line-icon";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   ActivityIndicator,
@@ -80,7 +81,7 @@ export function PublishUpdateScreen() {
       >
         <View style={styles.navRow}>
           <Pressable onPress={back} style={styles.backBtn}>
-            <Text style={styles.backBtnText}>←</Text>
+            <LineIcon name="arrow-left" size={22} color={NodoColors.textPrimary} />
           </Pressable>
           <Text style={styles.headerTitle}>Nueva actualización</Text>
           <View style={{ width: 42 }} />

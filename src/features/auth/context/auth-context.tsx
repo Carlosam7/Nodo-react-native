@@ -134,11 +134,13 @@ export function AuthProvider({ children, authService }: { children: React.ReactN
 
   const logout = useCallback(async (): Promise<void> => {
     setIsLoading(true);
+    setCurrentUser(null);
     try {
       const guest = await authService.logout();
       setCurrentUser(guest);
     } catch (err) {
       console.warn("Error al cerrar sesión:", err);
+      setError("No se pudo completar el cierre de sesión. Inténtalo de nuevo.");
     } finally {
       setIsLoading(false);
     }

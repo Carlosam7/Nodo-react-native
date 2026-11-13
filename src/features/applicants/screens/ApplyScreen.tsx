@@ -149,7 +149,7 @@ export function ApplyScreen() {
             accessibilityLabel="Volver"
             style={({ pressed }) => [styles.backBtn, pressed && styles.pressed]}
           >
-            <Text style={styles.backBtnText}>←</Text>
+            <LineIcon name="arrow-left" size={22} color={NodoColors.textPrimary} />
           </Pressable>
           <Text style={styles.headerTitle}>Postulación al equipo</Text>
           <View style={{ width: 42 }} />

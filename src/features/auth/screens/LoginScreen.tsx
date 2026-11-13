@@ -1,4 +1,5 @@
-import { Link, useRouter } from 'expo-router';
+import { LineIcon } from "@/components/ui/line-icon";
+import { Link, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
@@ -18,6 +19,7 @@ import { useAuth } from '@/features/auth/context/auth-context';
 
 export function LoginScreen() {
   const router = useRouter();
+  const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
   const insets = useSafeAreaInsets();
   const { login, isLoading, error, clearError } = useAuth();
 
@@ -37,7 +39,8 @@ export function LoginScreen() {
 
     try {
       await login(email, password);
-      goBackOrHome();
+      if (returnTo === "profile") router.replace("/profile");
+      else goBackOrHome();
     } catch {
       // El error se gestiona mediante el contexto
     }
@@ -65,7 +68,7 @@ export function LoginScreen() {
             ]}
             accessibilityRole="button"
             accessibilityLabel="Volver">
-            <Text style={styles.backButtonText}>←</Text>
+            <LineIcon name="arrow-left" size={22} color={NodoColors.textPrimary} />
           </Pressable>
         </View>
 

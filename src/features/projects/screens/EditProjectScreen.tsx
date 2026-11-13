@@ -1,14 +1,16 @@
+import { LineIcon } from "@/components/ui/line-icon";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { NodoColors } from "@/core/theme/colors";
 import { useEditProject } from "../hooks/useEditProject";
+import { ProjectColorPicker } from "../components/ProjectColorPicker";
 
 export function EditProjectScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
-  const { project, title, setTitle, description, setDescription, spots, setSpots, loading, saving, error, save } = useEditProject(id);
+  const { project, title, setTitle, description, setDescription, spots, setSpots, color, setColor, loading, saving, error, save } = useEditProject(id);
   const back = () => router.canGoBack() ? router.back() : router.replace("/profile");
   const handleSave = async () => { if (await save()) router.replace("/profile"); };
 
@@ -18,7 +20,7 @@ export function EditProjectScreen() {
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 24 }]} keyboardShouldPersistTaps="handled">
-        <Pressable onPress={back} disabled={saving} accessibilityRole="button"><Text style={styles.backText}>← Volver</Text></Pressable>
+        <Pressable onPress={back} disabled={saving} accessibilityRole="button"><View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}><LineIcon name="arrow-left" size={19} color={NodoColors.primary} /><Text style={styles.backText}>Volver</Text></View></Pressable>
         <Text style={styles.heading}>Editar proyecto</Text>
         <Text style={styles.subtitle}>Actualiza el nombre, la descripción y los cupos disponibles.</Text>
         <View style={styles.card}>
@@ -29,6 +31,7 @@ export function EditProjectScreen() {
           <Text style={styles.label}>Cupos totales</Text>
           <TextInput value={spots} onChangeText={setSpots} style={styles.input} keyboardType="number-pad" editable={!saving} />
           <Text style={styles.hint}>{project.filledSpots} cupos ocupados actualmente</Text>
+          <View style={{ marginTop: 20 }}><ProjectColorPicker color={color} onChange={setColor} disabled={saving} /></View>
           {error ? <Text style={styles.error} accessibilityRole="alert">{error}</Text> : null}
           <Pressable onPress={handleSave} disabled={saving} accessibilityRole="button" style={[styles.button, saving && styles.disabled]}>
             {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Guardar cambios</Text>}

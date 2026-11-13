@@ -44,10 +44,11 @@ test('la creación revierte el proyecto cuando falla asociar una categoría', as
 test('guardar cambios de proyecto utiliza el identificador interno', async () => {
   const calls = [];
   const repo = new RobleProjectRepository({ update: async (...args) => calls.push(args) }, catalog, gradients);
-  await repo.saveProjectEdit('record-1', { title: 'Nuevo', description: 'Detalle actualizado', totalSpots: 2 });
+  await repo.saveProjectEdit('record-1', { title: 'Nuevo', description: 'Detalle actualizado', totalSpots: 2, gradientColors: ['#123456', '#123456'] });
   assert.equal(calls[0][0], 'projects');
   assert.equal(calls[0][1], 'record-1');
   assert.equal(calls[0][2].total_spots, 2);
+  assert.equal(calls[0][2].gradient_colors, '["0xFF123456","0xFF123456"]');
 });
 
 test('repositorio de postulantes presenta perfiles y competencias asociadas', async () => {
@@ -125,4 +126,24 @@ test('el repositorio de chat filtra por proyecto y ordena los mensajes', async (
 test('el fallo al guardar un mensaje se propaga', async () => {
   const db = { insert: async () => { throw new Error('sin conexión'); } };
   await assert.rejects(new RobleChatRepository(db).saveMessage('p1', { id: 'u1', name: 'Ana' }, 'Hola'), /sin conexión/);
+});
+
+const { RobleNotificationRepository } = require('../src/features/notifications/infrastructure/roble-notification-repository.ts');
+test('notificaciones consulta por destinatario, ordena y marca la fila interna', async () => {
+  const calls = [];
+  const db = {
+    read: async (...args) => { calls.push(args); return [
+      { id: 'old', _id: 'old-row', recipient_id: 'u1', project_id: 'p1', title: 'Anterior', kind: 'update', created_at: '2026-01-01T00:00:00Z' },
+      { id: 'new', _id: 'new-row', recipient_id: 'u1', project_id: 'p1', title: 'Nueva', kind: 'application', created_at: '2026-02-01T00:00:00Z' },
+    ]; },
+    update: async (...args) => calls.push(args),
+  };
+  const repo = new RobleNotificationRepository(db);
+  const items = await repo.list('u1');
+  assert.deepEqual(calls[0], ['notifications', { recipient_id: 'u1' }]);
+  assert.deepEqual(items.map((item) => item.id), ['new', 'old']);
+  await repo.markRead(items[0].recordId);
+  assert.equal(calls[1][0], 'notifications');
+  assert.equal(calls[1][1], 'new-row');
+  assert.ok(calls[1][2].read_at);
 });

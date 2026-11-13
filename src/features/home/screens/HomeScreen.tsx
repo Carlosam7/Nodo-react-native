@@ -1,5 +1,6 @@
 import { LineIcon } from "@/components/ui/line-icon";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -11,6 +12,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { FloatingNotice } from "@/components/ui/FloatingNotice";
 import { NodoColors } from "@/core/theme/colors";
 import { useAuth } from "@/features/auth/context/auth-context";
 import { Project } from "@/features/projects/types/project";
@@ -29,6 +31,8 @@ export function HomeScreen() {
 
   const { categories, selectedCategory, setSelectedCategory, searchQuery, setSearchQuery, isLoading, isRefreshing, error, filteredProjects, loadData } = useHomeProjects();
 
+  const dismissPublished = useCallback(() => router.setParams({ published: undefined }), [router]);
+
   const handleProjectPress = (project: Project) => {
     router.push({
       pathname: "/project/[id]",
@@ -42,13 +46,15 @@ export function HomeScreen() {
       <HomeHeader />
 
       {published === "1" ? (
-        <PublishedBanner onDismiss={() => router.setParams({ published: undefined })} />
+        <View style={[styles.floatingSuccess, { top: insets.top + 12 }]} pointerEvents="box-none">
+          <FloatingNotice onDismiss={dismissPublished} topOffset={insets.top + 12}>{(close) => <PublishedBanner onDismiss={() => close()} />}</FloatingNotice>
+        </View>
       ) : null}
 
       {/* Barra de Búsqueda */}
       <SearchBar value={searchQuery} onChangeText={setSearchQuery} />
 
-      {/* Carrusel de Categorías */}
+      {/* Filtro de categorías */}
       <CategoryFilter
         categories={categories}
         selectedCategory={selectedCategory}
@@ -114,6 +120,7 @@ export function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
+  floatingSuccess: { position: "absolute", left: 0, right: 0, zIndex: 100, elevation: 10 },
   successBanner: {
     marginHorizontal: 20,
     marginBottom: 12,

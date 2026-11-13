@@ -1,3 +1,4 @@
+import { LineIcon } from "@/components/ui/line-icon";
 import { Link, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
@@ -66,7 +67,7 @@ export function RegisterScreen() {
             ]}
             accessibilityRole="button"
             accessibilityLabel="Volver">
-            <Text style={styles.backButtonText}>←</Text>
+            <LineIcon name="arrow-left" size={22} color={NodoColors.textPrimary} />
           </Pressable>
         </View>
 

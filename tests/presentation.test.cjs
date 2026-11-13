@@ -17,13 +17,16 @@ let updateState;
 let editState;
 let adminState;
 let chatState;
+let notificationsState = { items: [] };
+let authState = { isPublicSession: true, signedInUser: null, isLoading: false, logout: async () => {} };
 Module._load = function (request, parent, ...rest) {
   if (request === 'react-native') return require('react-native-web');
   if (request === 'react-native-svg') return { SvgXml: () => null };
   if (request === 'expo-haptics') return { selectionAsync: async () => {} };
+  if (request === '@/features/notifications/hooks/useNotifications' || request === '../hooks/useNotifications') return { useNotifications: () => notificationsState };
   if (request === 'expo-router') return { useRouter: () => ({ push() {}, replace() {}, setParams() {} }), useLocalSearchParams: () => ({}) };
   if (request === 'react-native-safe-area-context') return { useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) };
-  if (request === '@/features/auth/context/auth-context') return { useAuth: () => ({ isPublicSession: true, signedInUser: null }) };
+  if (request === '@/features/auth/context/auth-context') return { useAuth: () => authState };
   if (request === '../hooks/useHomeProjects') return { useHomeProjects: () => homeState };
   if (request === '../hooks/usePublishUpdate') return { usePublishUpdate: () => updateState };
   if (request === '../hooks/useEditProject') return { useEditProject: () => editState };
@@ -40,8 +43,38 @@ const { PublishUpdateScreen } = require('../src/features/project-updates/screens
 const { EditProjectScreen } = require('../src/features/projects/screens/EditProjectScreen.tsx');
 const { ApplicantsAdminScreen } = require('../src/features/applicants/screens/ApplicantsAdminScreen.tsx');
 const { ProjectChatScreen } = require('../src/features/chat/screens/ProjectChatScreen.tsx');
+const { NotificationsScreen } = require('../src/features/notifications/screens/NotificationsScreen.tsx');
+const { HomeHeader } = require('../src/features/home/components/HomeHeader.tsx');
+const { AppMenuContent } = require('../src/features/home/components/AppMenu.tsx');
 const project = { id: 'p1', title: 'Proyecto semilla', description: 'Una descripción', categories: ['CIENCIA'], skills: ['REACT'], totalSpots: 2, filledSpots: 0, status: 'idea', gradientColors: ['#c41230'] };
 const state = (changes = {}) => ({ categories: ['TODAS'], selectedCategory: 'TODAS', setSelectedCategory() {}, searchQuery: '', setSearchQuery() {}, isLoading: false, isRefreshing: false, error: null, filteredProjects: [], loadData() {}, ...changes });
+
+test('el menú ofrece perfil y distingue iniciar y cerrar sesión', () => {
+  const actions = { onHome() {}, onProfile() {}, onNotifications() {}, onAuth() {}, onClose() {}, isLoading: false };
+  const header = renderToStaticMarkup(React.createElement(HomeHeader));
+  assert.match(header, /aria-label="Abrir menú"/);
+  const guest = renderToStaticMarkup(React.createElement(AppMenuContent, { ...actions, isPublicSession: true }));
+  assert.match(guest, /aria-label="Mi perfil"/);
+  assert.match(guest, /aria-label="Iniciar sesión"/);
+  assert.doesNotMatch(guest, /aria-label="Cerrar sesión"/);
+  const signedIn = renderToStaticMarkup(React.createElement(AppMenuContent, { ...actions, isPublicSession: false, name: 'Ana' }));
+  assert.match(signedIn, /aria-label="Cerrar sesión"/);
+  assert.match(signedIn, /aria-label="Mi perfil"/);
+  assert.doesNotMatch(signedIn, /aria-label="Iniciar sesión"/);
+});
+
+test('la bandeja invita a iniciar sesión al visitante', () => {
+  notificationsState = { items: [], userId: null };
+  assert.match(renderToStaticMarkup(React.createElement(NotificationsScreen)), /Inicia sesión para ver tus notificaciones/);
+});
+
+test('la bandeja muestra el error de lectura y permite reintentar', () => {
+  notificationsState = { items: [], userId: 'u1', error: 'No se pudieron cargar las notificaciones.', loading: false };
+  const html = renderToStaticMarkup(React.createElement(NotificationsScreen));
+  assert.match(html, /No se pudieron cargar/);
+  assert.match(html, /Reintentar/);
+  notificationsState = { items: [] };
+});
 
 test('inicio muestra la carga mientras llegan los proyectos', () => {
   homeState = state({ isLoading: true });

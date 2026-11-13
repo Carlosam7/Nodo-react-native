@@ -113,6 +113,18 @@ test('crear un proyecto valida los datos antes de escribir', async () => {
   assert.equal(calls[1].description, 'Descripción suficiente');
 });
 
+test('crear y editar aceptan colores hexadecimales y rechazan colores inválidos', async () => {
+  const writes = [];
+  const valid = { title: 'Proyecto', description: 'Descripción suficiente', categories: ['Ciencia'], totalSpots: 2, skills: [] };
+  const createRepo = { ensureProfile: async () => {}, saveProject: async (draft) => { writes.push(draft); return draft; } };
+  const editRepo = { fetchProjectById: async () => project, saveProjectEdit: async (_id, draft) => writes.push(draft) };
+  await assert.rejects(createProject(createRepo, { ...valid, gradientColors: ['rojo', 'rojo'] }, user), /hexadecimal/);
+  await assert.rejects(editProject(editRepo, 'p1', { ...valid, gradientColors: ['#123', '#123'] }, { id: 'owner' }), /hexadecimal/);
+  await createProject(createRepo, { ...valid, gradientColors: ['#12AB34', '#12AB34'] }, user);
+  await editProject(editRepo, 'p1', { ...valid, gradientColors: ['#12AB34', '#12AB34'] }, { id: 'owner' });
+  assert.deepEqual(writes.map((draft) => draft.gradientColors), [['#12AB34', '#12AB34'], ['#12AB34', '#12AB34']]);
+});
+
 test('solo el líder cambia el estado y se usa el identificador persistido', async () => {
   const writes = [];
   const repo = { fetchProjectById: async () => project, updateProjectStatus: async (...args) => writes.push(args) };
@@ -200,4 +212,121 @@ test('el chat admite al líder y a integrantes aceptados, no a otros usuarios', 
   assert.equal((await service.fetchMessages('p1', { id: 'owner', isGuest: false })).length, 1);
   await service.sendMessage('p1', { id: 'member', isGuest: false }, ' Hola ');
   assert.equal(writes[0][2], 'Hola');
+});
+
+test('recorrido local: crear, postular, aceptar, editar y publicar un avance', async () => {
+  const leader = { id: 'owner', name: 'Líder' };
+  const member = { id: 'member', name: 'Integrante' };
+  const state = { project: null, applications: [], updates: [] };
+  const repo = {
+    ensureProfile: async () => {},
+    saveProject: async (input) => {
+      state.project = { ...input, id: 'project-flow', recordId: 'project-row', creatorId: leader.id, filledSpots: 0 };
+      return { ...state.project };
+    },
+    fetchProjectById: async (id) => state.project?.id === id ? { ...state.project } : null,
+    saveProjectEdit: async (_id, input) => { Object.assign(state.project, input); },
+    hasApplication: async (projectId, applicantId) => state.applications.some((item) => item.projectId === projectId && item.applicantId === applicantId),
+    saveApplication: async (_draft, applicant, selectedProject) => {
+      const result = { id: 'app-flow', recordId: 'application-row', projectId: selectedProject.id, applicantId: applicant.id, status: 'pending' };
+      state.applications.push(result);
+      return { ...result };
+    },
+    updateApplicationStatus: async (_id, status) => { state.applications[0].status = status; },
+    updateProjectSpots: async (_id, value) => { state.project.filledSpots = value; },
+    fetchTeamMembers: async () => state.applications.filter((item) => item.status === 'accepted').map((item) => ({ userId: item.applicantId, isCreator: false })),
+    saveUpdate: async (input) => { const result = { id: 'update-flow', ...input }; state.updates.push(result); return result; },
+    updateProjectStatus: async (_id, status) => { state.project.status = status; },
+  };
+  const created = await createProject(repo, { title: ' Proyecto final ', description: ' Descripción suficiente ', categories: ['Ciencia'], totalSpots: 2, skills: [] }, leader);
+  const application = await submitApplication(repo, { ...draft, projectId: created.id }, member, created);
+  await decideApplication(repo, { applicant: application, project: created, newStatus: 'accepted', actor: leader });
+  await editProject(repo, created.id, { title: 'Proyecto actualizado', description: 'Descripción actualizada', totalSpots: 3 }, leader);
+  await publishUpdate(repo, { projectId: created.id, author: member, title: 'Primer avance', body: 'Trabajo realizado' });
+  assert.equal(state.applications[0].status, 'accepted');
+  assert.equal(state.project.filledSpots, 1);
+  assert.equal(state.project.totalSpots, 3);
+  assert.equal(state.project.title, 'Proyecto actualizado');
+  assert.equal(state.updates[0].author.id, member.id);
+});
+
+test('el fallo al guardar un avance no intenta cambiar el estado del proyecto', async () => {
+  let changes = 0;
+  const repo = {
+    fetchProjectById: async () => project,
+    fetchTeamMembers: async () => [],
+    saveUpdate: async () => { throw new Error('base no disponible'); },
+    updateProjectStatus: async () => { changes++; },
+  };
+  await assert.rejects(publishUpdate(repo, { projectId: 'p1', author: { id: 'owner' }, title: 'Avance', body: 'Contenido', newStatus: 'cerrado' }), /base no disponible/);
+  assert.equal(changes, 0);
+});
+
+const { NotificationService } = require('../src/features/notifications/application/notification-service.ts');
+test('una notificación solo puede marcarla como leída su destinatario', async () => {
+  const updates = [];
+  const service = new NotificationService({ markRead: async (id) => updates.push(id) });
+  const notification = { recipientId: 'member', recordId: 'n1', readAt: null };
+  await assert.rejects(service.markRead(notification, 'other'), /No puedes/);
+  assert.deepEqual(updates, []);
+  await service.markRead(notification, 'member');
+  assert.deepEqual(updates, ['n1']);
+});
+
+test('postular avisa al líder sin convertir un fallo del aviso en fallo de la postulación', async () => {
+  const notifications = [];
+  const actualProject = { ...project, title: 'Proyecto prueba' };
+  const repo = { hasApplication: async () => false, saveApplication: async () => ({ id: 'a1' }) };
+  const sender = { send: async (item) => { notifications.push(item); throw new Error('fallo de notificación'); } };
+  const service = new ApplicantService(repo, { ensureProfile: async () => {} }, { fetchProjectById: async () => actualProject }, sender);
+  const oldWarn = console.warn;
+  console.warn = () => {};
+  try {
+    assert.equal((await service.submitApplication(draft, user, actualProject)).id, 'a1');
+    assert.equal(notifications[0].recipientId, 'owner');
+    assert.equal(notifications[0].kind, 'application');
+  } finally { console.warn = oldWarn; }
+});
+
+test('una decisión avisa al postulante solo cuando cambia su estado', async () => {
+  const sent = [];
+  const actualProject = { ...project, title: 'Proyecto prueba' };
+  let currentStatus = 'pending';
+  const repo = {
+    fetchApplicantsByProject: async () => [{ id: 'a1', recordId: 'ar1', applicantId: 'member', status: currentStatus }],
+    updateApplicationStatus: async (_id, status) => { currentStatus = status; },
+    updateProjectSpots: async () => {},
+  };
+  const service = new ApplicantService(repo, {}, { fetchProjectById: async () => actualProject }, { send: async (item) => sent.push(item) });
+  const input = { applicant: { id: 'a1' }, project: actualProject, actor: { id: 'owner' }, newStatus: 'accepted' };
+  await service.decideApplication(input);
+  await service.decideApplication(input);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].recipientId, 'member');
+  assert.equal(sent[0].kind, 'accepted');
+});
+
+const { ProjectService } = require('../src/features/projects/application/project-service.ts');
+test('un avance notifica a los demás integrantes una sola vez y excluye al autor', async () => {
+  const sent = [];
+  const currentProject = { ...project, title: 'Proyecto prueba' };
+  const repository = {
+    fetchProjectById: async () => currentProject,
+    fetchTeamMembers: async () => [{ userId: 'member', isCreator: false }, { userId: 'owner', isCreator: true }],
+    saveUpdate: async () => ({ id: 'update-1' }),
+  };
+  const service = new ProjectService(repository, {}, { send: async (item) => sent.push(item) });
+  await service.publishUpdate({ projectId: 'p1', author: { id: 'member', name: 'Ana' }, title: 'Avance', body: 'Texto' });
+  assert.deepEqual(sent.map((item) => item.recipientId), ['owner']);
+  assert.equal(sent[0].kind, 'update');
+});
+
+const { findNewNotification } = require('../src/features/notifications/application/find-new-notification.ts');
+test('solo aparecen como burbuja las notificaciones no leídas recibidas tras la carga inicial', () => {
+  const old = { id: 'old', readAt: null };
+  const read = { id: 'read', readAt: new Date() };
+  const incoming = { id: 'new', readAt: null };
+  assert.equal(findNewNotification(null, [old]), null);
+  assert.equal(findNewNotification(new Set(['old']), [old, read]), null);
+  assert.equal(findNewNotification(new Set(['old']), [incoming, old]), incoming);
 });

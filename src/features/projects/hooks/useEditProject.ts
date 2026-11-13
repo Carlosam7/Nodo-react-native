@@ -11,6 +11,7 @@ export function useEditProject(id?: string) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [spots, setSpots] = useState("");
+  const [color, setColor] = useState("#C41230");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -24,6 +25,7 @@ export function useEditProject(id?: string) {
       if (!result) { setError("No se encontró el proyecto."); return; }
       if (!signedInUser || result.creatorId !== signedInUser.id) { setError("Solo el creador puede editar este proyecto."); return; }
       setProject(result); setTitle(result.title); setDescription(result.description); setSpots(String(result.totalSpots));
+      setColor(result.gradientColors[0] || "#C41230");
     }).catch((err) => { if (active) setError(friendlyErrorMessage(err)); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
@@ -33,10 +35,10 @@ export function useEditProject(id?: string) {
     if (busy.current || !project || !signedInUser) return false;
     busy.current = true; setSaving(true); setError(null);
     try {
-      await projects.editProject(project.id, { title, description, totalSpots: Number(spots) }, signedInUser);
+      await projects.editProject(project.id, { title, description, totalSpots: Number(spots), ...(color !== project.gradientColors[0] ? { gradientColors: [color, color] } : {}) }, signedInUser);
       return true;
     } catch (err) { setError(friendlyErrorMessage(err)); return false; }
     finally { busy.current = false; setSaving(false); }
   };
-  return { project, title, setTitle, description, setDescription, spots, setSpots, loading: Boolean(id && loading), saving, error, save };
+  return { project, title, setTitle, description, setDescription, spots, setSpots, color, setColor, loading: Boolean(id && loading), saving, error, save };
 }
