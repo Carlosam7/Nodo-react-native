@@ -44,10 +44,11 @@ test('la creación revierte el proyecto cuando falla asociar una categoría', as
 test('guardar cambios de proyecto utiliza el identificador interno', async () => {
   const calls = [];
   const repo = new RobleProjectRepository({ update: async (...args) => calls.push(args) }, catalog, gradients);
-  await repo.saveProjectEdit('record-1', { title: 'Nuevo', description: 'Detalle actualizado', totalSpots: 2 });
+  await repo.saveProjectEdit('record-1', { title: 'Nuevo', description: 'Detalle actualizado', totalSpots: 2, gradientColors: ['#123456', '#123456'] });
   assert.equal(calls[0][0], 'projects');
   assert.equal(calls[0][1], 'record-1');
   assert.equal(calls[0][2].total_spots, 2);
+  assert.equal(calls[0][2].gradient_colors, '["0xFF123456","0xFF123456"]');
 });
 
 test('repositorio de postulantes presenta perfiles y competencias asociadas', async () => {

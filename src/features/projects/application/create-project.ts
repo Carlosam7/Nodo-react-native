@@ -12,6 +12,7 @@ export async function createProject(repository: CreateProjectRepository, draft: 
   if (draft.description.trim().length < 10) throw new ValidationFailure("La descripción debe tener al menos 10 caracteres.");
   if (draft.categories.length === 0 || !draft.categories.some((category) => category.trim())) throw new ValidationFailure("Selecciona al menos una categoría para clasificar tu iniciativa.");
   if (!Number.isInteger(draft.totalSpots) || draft.totalSpots < 1 || draft.totalSpots > 20) throw new ValidationFailure("El número de cupos debe estar entre 1 y 20.");
+  if (draft.gradientColors && (draft.gradientColors.length < 2 || draft.gradientColors.some((color) => !/^#[0-9a-f]{6}$/i.test(color)))) throw new ValidationFailure("Ingresa un color hexadecimal válido, por ejemplo #C41230.");
   await repository.ensureProfile(creator);
   return repository.saveProject({ ...draft, title: draft.title.trim(), description: draft.description.trim() }, creator);
 }

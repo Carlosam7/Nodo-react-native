@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { friendlyErrorMessage } from "@/core/errors/failures";
 import { NodoColors } from "@/core/theme/colors";
+import { ProjectColorPicker } from "@/features/projects/components/ProjectColorPicker";
 import { useAuth } from "@/features/auth/context/auth-context";
 import { useServices } from "@/core/presentation/services-context";
 
@@ -309,31 +310,8 @@ export function CreateProjectScreen() {
             </View>
           </View>
 
-          {/* Selector de Acento / Gradiente */}
           <View style={styles.fieldGroup}>
-            <Text style={styles.fieldLabel}>
-              Identidad visual de la tarjeta
-            </Text>
-            <View style={styles.gradientsRow}>
-              {NodoColors.projectGradients.map((grad, idx) => {
-                const isSelected = selectedGradient[0] === grad[0];
-                return (
-                  <Pressable
-                    key={idx}
-                    onPress={() => setSelectedGradient([...grad])}
-                    style={[
-                      styles.gradientCircle,
-                      { backgroundColor: grad[0] },
-                      isSelected && styles.gradientCircleSelected,
-                    ]}
-                  >
-                    {isSelected ? (
-                      <Text style={styles.checkmark}>✓</Text>
-                    ) : null}
-                  </Pressable>
-                );
-              })}
-            </View>
+            <ProjectColorPicker color={selectedGradient[0]} onChange={(color) => setSelectedGradient([color, color])} disabled={isSubmitting} />
           </View>
 
           {/* Botón de Publicación */}

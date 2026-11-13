@@ -17,5 +17,6 @@ export async function editProject(repository: EditProjectRepository, id: string,
   if (description.length < 10) throw new ValidationFailure("La descripción debe tener al menos 10 caracteres.");
   if (!Number.isInteger(draft.totalSpots) || draft.totalSpots < 1 || draft.totalSpots > 20) throw new ValidationFailure("El número de cupos debe estar entre 1 y 20.");
   if (draft.totalSpots < project.filledSpots) throw new ValidationFailure("Los cupos no pueden ser menores que los ya ocupados.");
-  await repository.saveProjectEdit(project.recordId, { title, description, totalSpots: draft.totalSpots });
+  if (draft.gradientColors && (draft.gradientColors.length < 2 || draft.gradientColors.some((color) => !/^#[0-9a-f]{6}$/i.test(color)))) throw new ValidationFailure("Ingresa un color hexadecimal válido, por ejemplo #C41230.");
+  await repository.saveProjectEdit(project.recordId, { title, description, totalSpots: draft.totalSpots, ...(draft.gradientColors ? { gradientColors: draft.gradientColors } : {}) });
 }

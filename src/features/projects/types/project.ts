@@ -28,6 +28,7 @@ export interface ProjectEdit {
   title: string;
   description: string;
   totalSpots: number;
+  gradientColors?: string[];
 }
 
 export interface TeamMember {

@@ -4,12 +4,13 @@ import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollVie
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { NodoColors } from "@/core/theme/colors";
 import { useEditProject } from "../hooks/useEditProject";
+import { ProjectColorPicker } from "../components/ProjectColorPicker";
 
 export function EditProjectScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
-  const { project, title, setTitle, description, setDescription, spots, setSpots, loading, saving, error, save } = useEditProject(id);
+  const { project, title, setTitle, description, setDescription, spots, setSpots, color, setColor, loading, saving, error, save } = useEditProject(id);
   const back = () => router.canGoBack() ? router.back() : router.replace("/profile");
   const handleSave = async () => { if (await save()) router.replace("/profile"); };
 
@@ -30,6 +31,7 @@ export function EditProjectScreen() {
           <Text style={styles.label}>Cupos totales</Text>
           <TextInput value={spots} onChangeText={setSpots} style={styles.input} keyboardType="number-pad" editable={!saving} />
           <Text style={styles.hint}>{project.filledSpots} cupos ocupados actualmente</Text>
+          <View style={{ marginTop: 20 }}><ProjectColorPicker color={color} onChange={setColor} disabled={saving} /></View>
           {error ? <Text style={styles.error} accessibilityRole="alert">{error}</Text> : null}
           <Pressable onPress={handleSave} disabled={saving} accessibilityRole="button" style={[styles.button, saving && styles.disabled]}>
             {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Guardar cambios</Text>}

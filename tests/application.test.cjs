@@ -113,6 +113,18 @@ test('crear un proyecto valida los datos antes de escribir', async () => {
   assert.equal(calls[1].description, 'Descripción suficiente');
 });
 
+test('crear y editar aceptan colores hexadecimales y rechazan colores inválidos', async () => {
+  const writes = [];
+  const valid = { title: 'Proyecto', description: 'Descripción suficiente', categories: ['Ciencia'], totalSpots: 2, skills: [] };
+  const createRepo = { ensureProfile: async () => {}, saveProject: async (draft) => { writes.push(draft); return draft; } };
+  const editRepo = { fetchProjectById: async () => project, saveProjectEdit: async (_id, draft) => writes.push(draft) };
+  await assert.rejects(createProject(createRepo, { ...valid, gradientColors: ['rojo', 'rojo'] }, user), /hexadecimal/);
+  await assert.rejects(editProject(editRepo, 'p1', { ...valid, gradientColors: ['#123', '#123'] }, { id: 'owner' }), /hexadecimal/);
+  await createProject(createRepo, { ...valid, gradientColors: ['#12AB34', '#12AB34'] }, user);
+  await editProject(editRepo, 'p1', { ...valid, gradientColors: ['#12AB34', '#12AB34'] }, { id: 'owner' });
+  assert.deepEqual(writes.map((draft) => draft.gradientColors), [['#12AB34', '#12AB34'], ['#12AB34', '#12AB34']]);
+});
+
 test('solo el líder cambia el estado y se usa el identificador persistido', async () => {
   const writes = [];
   const repo = { fetchProjectById: async () => project, updateProjectStatus: async (...args) => writes.push(args) };

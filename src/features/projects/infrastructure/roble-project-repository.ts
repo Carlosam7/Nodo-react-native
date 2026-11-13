@@ -223,6 +223,7 @@ export class RobleProjectRepository {
       title: draft.title,
       description: draft.description,
       total_spots: draft.totalSpots,
+      ...(draft.gradientColors ? { gradient_colors: RowParsing.encodeColors(draft.gradientColors) } : {}),
       updated_at: new Date().toISOString(),
     });
   }
