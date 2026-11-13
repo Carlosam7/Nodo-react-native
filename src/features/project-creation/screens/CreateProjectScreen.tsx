@@ -57,7 +57,7 @@ export function CreateProjectScreen() {
     return (
       <View style={[styles.guestContainer, { paddingTop: insets.top + 40 }]}>
         <Pressable onPress={goBack} accessibilityRole="button" accessibilityLabel="Volver">
-          <Text style={styles.backText}>← Volver</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}><LineIcon name="arrow-left" size={19} color={NodoColors.primary} /><Text style={styles.backText}>Volver</Text></View>
         </Pressable>
         <View style={styles.guestCard}>
           <LineIcon name="bulb-2" size={42} color={NodoColors.primary} />
@@ -154,7 +154,7 @@ export function CreateProjectScreen() {
         {/* Cabecera */}
         <View style={styles.header}>
           <Pressable onPress={goBack} disabled={isSubmitting} accessibilityRole="button" accessibilityLabel="Volver">
-            <Text style={styles.backText}>← Volver</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}><LineIcon name="arrow-left" size={19} color={NodoColors.primary} /><Text style={styles.backText}>Volver</Text></View>
           </Pressable>
           <Text style={styles.headerTitle}>Crear nueva iniciativa</Text>
           <Text style={styles.headerSubtitle}>

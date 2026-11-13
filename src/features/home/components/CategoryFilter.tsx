@@ -1,7 +1,9 @@
-import { LayoutAnimation, Platform, Pressable, ScrollView, StyleSheet, Text } from "react-native";
+import { useState } from "react";
+import { LayoutAnimation, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import * as Haptics from "expo-haptics";
 
+import { LineIcon } from "@/components/ui/line-icon";
 import { NodoColors } from "@/core/theme/colors";
 
 interface CategoryFilterProps {
@@ -10,97 +12,65 @@ interface CategoryFilterProps {
   onSelectCategory: (category: string) => void;
 }
 
-export function CategoryFilter({
-  categories,
-  selectedCategory,
-  onSelectCategory,
-}: CategoryFilterProps) {
+export function CategoryFilter({ categories, selectedCategory, onSelectCategory }: CategoryFilterProps) {
+  const [isOpen, setIsOpen] = useState(false);
+
   return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.scrollContent}
-      style={styles.container}
-    >
-      {categories.map((cat) => {
-        const isSelected = selectedCategory === cat;
-        return (
-          <Pressable
-            key={cat}
-            onPress={() => {
-              if (cat === selectedCategory) return;
-              LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-              if (Platform.OS !== "web") void Haptics.selectionAsync().catch(() => {});
-              onSelectCategory(cat);
-            }}
-            style={({ pressed }) => [
-              styles.chip,
-              isSelected ? styles.chipSelected : styles.chipUnselected,
-              pressed && styles.pressed,
-            ]}
-            accessibilityRole="button"
-            accessibilityState={{ selected: isSelected }}
-          >
-            <Text
-              style={[
-                styles.chipText,
-                isSelected
-                  ? styles.chipTextSelected
-                  : styles.chipTextUnselected,
-              ]}
-            >
-              {cat}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </ScrollView>
+    <View style={styles.container}>
+      <Pressable
+        onPress={() => setIsOpen((open) => !open)}
+        style={({ pressed }) => [styles.button, pressed && styles.pressed]}
+        accessibilityRole="button"
+        accessibilityLabel={`Filtrar por categoría. Seleccionada: ${selectedCategory}`}
+        accessibilityState={{ expanded: isOpen }}
+      >
+        <View style={styles.buttonTextContainer}>
+          <Text style={styles.label}>Categoría</Text>
+          <Text style={styles.selection} numberOfLines={1}>{selectedCategory === "TODAS" ? "Todas las categorías" : selectedCategory}</Text>
+        </View>
+        <Text style={styles.arrow} aria-hidden>{isOpen ? "▴" : "▾"}</Text>
+      </Pressable>
+      {isOpen ? (
+        <ScrollView style={styles.options} nestedScrollEnabled keyboardShouldPersistTaps="handled">
+          {categories.map((category) => {
+            const selected = selectedCategory === category;
+            return (
+              <Pressable
+                key={category}
+                onPress={() => {
+                  if (!selected) {
+                    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                    if (Platform.OS !== "web") void Haptics.selectionAsync().catch(() => {});
+                    onSelectCategory(category);
+                  }
+                  setIsOpen(false);
+                }}
+                style={({ pressed }) => [styles.option, selected && styles.selectedOption, pressed && styles.pressed]}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: selected }}
+              >
+                <Text style={[styles.optionText, selected && styles.selectedText]}>{category === "TODAS" ? "Todas las categorías" : category}</Text>
+                {selected ? <LineIcon name="check" size={20} color={NodoColors.primary} /> : null}
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      ) : null}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flexGrow: 0,
-    flexShrink: 0,
-    minHeight: 52,
-    marginBottom: 16,
-  },
-  scrollContent: {
-    paddingHorizontal: 20,
-    paddingVertical: 4,
-    gap: 8,
-    alignItems: "center",
-  },
-  chip: {
-    flexShrink: 0,
-    minHeight: 40,
-    justifyContent: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
-  chipSelected: {
-    backgroundColor: NodoColors.primary,
-    borderColor: NodoColors.primary,
-  },
-  chipUnselected: {
-    backgroundColor: NodoColors.surface,
-    borderColor: NodoColors.chipBorder,
-  },
-  chipText: {
-    fontSize: 13,
-    fontWeight: "700",
-    letterSpacing: 0.3,
-  },
-  chipTextSelected: {
-    color: "#FFFFFF",
-  },
-  chipTextUnselected: {
-    color: NodoColors.textSecondary,
-  },
-  pressed: {
-    opacity: 0.8,
-    transform: [{ scale: 0.97 }],
-  },
+  container: { marginHorizontal: 20, marginBottom: 16 },
+  button: { minHeight: 56, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 8, backgroundColor: NodoColors.surface, borderColor: NodoColors.border, borderWidth: 1, borderRadius: 14 },
+  buttonTextContainer: { flex: 1 },
+  label: { color: NodoColors.textSecondary, fontSize: 11, fontWeight: "700" },
+  selection: { color: NodoColors.textPrimary, fontSize: 14, fontWeight: "700", marginTop: 2 },
+  arrow: { color: NodoColors.primary, fontSize: 20, marginLeft: 12 },
+  options: { maxHeight: 220, marginTop: 6, backgroundColor: NodoColors.surface, borderColor: NodoColors.border, borderWidth: 1, borderRadius: 14 },
+  option: { minHeight: 48, paddingHorizontal: 16, paddingVertical: 10, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  selectedOption: { backgroundColor: NodoColors.primaryLight },
+  optionText: { flex: 1, color: NodoColors.textPrimary, fontSize: 14 },
+  selectedText: { color: NodoColors.primary, fontWeight: "700" },
+  pressed: { opacity: 0.7 },
 });

@@ -1,6 +1,6 @@
 import { LineIcon } from "@/components/ui/line-icon";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -56,11 +56,9 @@ export function ProjectDetailScreen() {
     }
   }, [id, signedInUser, projectService, applicantService]);
 
-  useEffect(() => {
-    // Carga inicial de datos remotos al montar la pantalla
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadProjectData();
-  }, [loadProjectData]);
+  useFocusEffect(useCallback(() => {
+    void loadProjectData();
+  }, [loadProjectData]));
 
   if (isLoading) {
     return (
@@ -90,7 +88,7 @@ export function ProjectDetailScreen() {
   );
   const isMember = Boolean(
     signedInUser &&
-    teamMembers.some((m) => m.userId === signedInUser.id && !m.isCreator),
+    (myApplication?.status === "accepted" || teamMembers.some((m) => m.userId === signedInUser.id && !m.isCreator)),
   );
 
   const availableSpots = Math.max(0, project.totalSpots - project.filledSpots);
@@ -163,7 +161,7 @@ export function ProjectDetailScreen() {
             accessibilityRole="button"
             accessibilityLabel="Volver"
           >
-            <Text style={styles.navButtonText}>←</Text>
+            <LineIcon name="arrow-left" size={22} color={NodoColors.textPrimary} />
           </Pressable>
           <View style={styles.navBadges}>
             <View
@@ -221,6 +219,16 @@ export function ProjectDetailScreen() {
           </View>
         </View>
 
+        {isMember ? (
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>Estado del proyecto</Text>
+            <Text style={styles.descriptionText}>Estado actual: {statusConfig.label}</Text>
+            <Text style={styles.descriptionText}>Cupos ocupados: {project.filledSpots} de {project.totalSpots} · Disponibles: {availableSpots}</Text>
+            <Text style={styles.descriptionText}>Integrantes del equipo: {teamMembers.length}</Text>
+            <Text style={styles.descriptionText}>Avances registrados: {updates.length}</Text>
+          </View>
+        ) : null}
+
         {/* Descripción */}
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>Propósito y descripción</Text>
@@ -263,12 +271,6 @@ export function ProjectDetailScreen() {
             Líder e integrantes admitidos formalmente en la iniciativa
           </Text>
 
-          {isCreator || isMember ? (
-            <Pressable onPress={handleChatPress} style={styles.smallActionBtn} accessibilityRole="button" accessibilityLabel="Abrir chat del equipo">
-              <LineIcon name="chat-bubble-2" size={16} color={NodoColors.primaryDark} /><Text style={styles.smallActionText}>Chat del equipo</Text>
-            </Pressable>
-          ) : null}
-
           <View style={styles.teamList}>
             {teamMembers.map((member) => (
               <View key={member.userId} style={styles.teamMemberRow}>
@@ -289,6 +291,17 @@ export function ProjectDetailScreen() {
             ))}
           </View>
         </View>
+
+        {isCreator || isMember ? (
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>Canales de comunicación</Text>
+            <Text style={styles.sectionSubtitle}>Comunícate con los integrantes del proyecto</Text>
+            <Pressable onPress={handleChatPress} style={styles.channelButton} accessibilityRole="button" accessibilityLabel="Abrir chat del equipo">
+              <LineIcon name="chat-bubble-2" size={20} color={NodoColors.primaryDark} />
+              <Text style={styles.smallActionText}>Chat del equipo</Text>
+            </Pressable>
+          </View>
+        ) : null}
 
         {/* Bitácora de Avances */}
         <View style={styles.sectionCard}>
@@ -402,6 +415,7 @@ export function ProjectDetailScreen() {
 }
 
 const styles = StyleSheet.create({
+  channelButton: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: NodoColors.primaryMuted, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, marginTop: 12 },
   container: {
     flex: 1,
     backgroundColor: NodoColors.background,

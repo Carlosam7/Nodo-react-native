@@ -12,6 +12,7 @@ import {
 import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { LineIcon } from "@/components/ui/line-icon";
 import { NodoColors } from "@/core/theme/colors";
 import { useServices } from "@/core/presentation/services-context";
 import { useAuth } from "@/features/auth/context/auth-context";
@@ -105,11 +106,11 @@ export function ProfileScreen() {
           accessibilityRole="button"
           accessibilityLabel="Volver"
         >
-          <Text style={styles.backText}>←</Text>
+          <LineIcon name="arrow-left" size={22} color={NodoColors.textPrimary} />
         </Pressable>
         <Text style={styles.headerTitle}>Mi perfil</Text>
-        <Pressable onPress={handleLogout} style={styles.logoutButton}>
-          <Text style={styles.logoutText}>Salir</Text>
+        <Pressable onPress={handleLogout} style={styles.logoutButton} accessibilityRole="button" accessibilityLabel="Cerrar sesión">
+          <LineIcon name="exit" size={21} color={NodoColors.primary} />
         </Pressable>
       </View>
 
@@ -255,7 +256,6 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     borderRadius: 8,
   },
-  logoutText: { color: NodoColors.primary, fontWeight: "700", fontSize: 13 },
   userCard: {
     alignItems: "center",
     paddingVertical: 16,

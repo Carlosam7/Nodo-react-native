@@ -1,35 +1,21 @@
 import { LineIcon } from "@/components/ui/line-icon";
 import { useRouter } from "expo-router";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { useState } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { NodoColors } from "@/core/theme/colors";
-import { useAuth } from "@/features/auth/context/auth-context";
+import { useNotifications } from "@/features/notifications/hooks/useNotifications";
+import { AppMenu } from "./AppMenu";
 
 export function HomeHeader() {
   const router = useRouter();
-  const { isPublicSession, signedInUser } = useAuth();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const { items } = useNotifications();
+  const unreadCount = items.filter((item) => !item.readAt).length;
 
   const handleNotificationPress = () => {
-    // Modo maqueta (stub) conforme al acuerdo del Lienzo de Alineación
-    Alert.alert("Notificaciones", "Módulo en maqueta para esta iteración.");
+    router.push("/notifications");
   };
-
-  const handleAuthPress = () => {
-    if (isPublicSession) {
-      router.push("/auth/login");
-    } else {
-      router.push("/profile");
-    }
-  };
-
-  const initials = signedInUser?.name
-    ? signedInUser.name
-        .split(" ")
-        .map((n) => n[0])
-        .slice(0, 2)
-        .join("")
-        .toUpperCase()
-    : "U";
 
   return (
     <View style={styles.container}>
@@ -45,7 +31,7 @@ export function HomeHeader() {
         </View>
 
         <View style={styles.actionsRow}>
-          {/* Campana de Notificaciones (Stub acordado) */}
+          {/* Bandeja de notificaciones */}
           <Pressable
             onPress={handleNotificationPress}
             style={({ pressed }) => [
@@ -53,36 +39,34 @@ export function HomeHeader() {
               pressed && styles.pressed,
             ]}
             accessibilityRole="button"
-            accessibilityLabel="Notificaciones"
+            accessibilityLabel={
+              unreadCount
+                ? `Notificaciones, ${unreadCount} sin leer`
+                : "Notificaciones"
+            }
           >
             <LineIcon name="bell-1" size={21} color={NodoColors.textPrimary} />
-            <View style={styles.notificationDot} />
+            {unreadCount > 0 ? <View style={styles.notificationDot} /> : null}
           </Pressable>
 
-          {/* Perfil o Iniciar Sesión */}
-          {isPublicSession ? (
-            <Pressable
-              onPress={handleAuthPress}
-              style={({ pressed }) => [
-                styles.loginButton,
-                pressed && styles.pressed,
-              ]}
-            >
-              <Text style={styles.loginButtonText}>Entrar</Text>
-            </Pressable>
-          ) : (
-            <Pressable
-              onPress={handleAuthPress}
-              style={({ pressed }) => [
-                styles.avatarButton,
-                pressed && styles.pressed,
-              ]}
-            >
-              <Text style={styles.avatarText}>{initials}</Text>
-            </Pressable>
-          )}
+          <Pressable
+            onPress={() => setMenuOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Abrir menú"
+            style={({ pressed }) => [
+              styles.iconButton,
+              pressed && styles.pressed,
+            ]}
+          >
+            <LineIcon
+              name="menu-hamburger-1"
+              size={21}
+              color={NodoColors.textPrimary}
+            />
+          </Pressable>
         </View>
       </View>
+      <AppMenu visible={menuOpen} onClose={() => setMenuOpen(false)} />
     </View>
   );
 }
@@ -90,8 +74,8 @@ export function HomeHeader() {
 const styles = StyleSheet.create({
   container: {
     paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 14,
+    paddingTop: 45,
+    paddingBottom: 30,
     backgroundColor: NodoColors.background,
   },
   brandRow: {
@@ -167,11 +151,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 20,
   },
-  loginButtonText: {
-    color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "700",
-  },
+  disabled: { opacity: 0.5 },
   avatarButton: {
     width: 38,
     height: 38,

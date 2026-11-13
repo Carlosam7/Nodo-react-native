@@ -138,7 +138,7 @@ export function ApplicantsAdminScreen() {
             onPress={goBack}
             style={({ pressed }) => [styles.navBtn, pressed && styles.pressed]}
           >
-            <Text style={styles.navBtnText}>←</Text>
+            <LineIcon name="arrow-left" size={22} color={NodoColors.textPrimary} />
           </Pressable>
           <View style={{ flex: 1, marginLeft: 12 }}>
             <Text style={styles.headerTitle} numberOfLines={1}>

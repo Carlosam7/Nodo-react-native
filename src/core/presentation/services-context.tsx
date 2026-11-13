@@ -1,11 +1,13 @@
 import { createContext, useContext, type ReactNode } from "react";
 import type { ApplicantOperations, ProjectOperations } from "@/core/application/services";
 import type { ChatOperations } from "@/features/chat/application/chat-service";
+import type { NotificationService } from "@/features/notifications/application/notification-service";
 
 export interface AppServices {
   projects: ProjectOperations;
   applicants: ApplicantOperations;
   chat: ChatOperations;
+  notifications: NotificationService;
 }
 
 const ServicesContext = createContext<AppServices | null>(null);

@@ -10,14 +10,26 @@ const memoryStore = new Map<string, string>();
 
 /**
  * Almacén seguro para tokens de autenticación de Roble.
- * Usa `expo-secure-store` en Android e iOS, y `localStorage` en Web.
+ * Usa `expo-secure-store` en Android e iOS y cookies en Web.
+ * Las cookies son accesibles desde JavaScript: Roble entrega los tokens al cliente.
  */
+const cookieName = (key: string) => encodeURIComponent(key);
+const cookieOptions = () =>
+  `Path=/; SameSite=Strict${typeof window !== 'undefined' && window.location?.protocol === 'https:' ? '; Secure' : ''}`;
+
 export const TokenStorage = {
   async getItem(key: string): Promise<string | null> {
     if (Platform.OS === 'web') {
       try {
-        if (typeof window !== 'undefined' && window.localStorage) {
-          return window.localStorage.getItem(key);
+        if (typeof document !== 'undefined') {
+          const prefix = `${cookieName(key)}=`;
+          const cookie = document.cookie.split('; ').find((item) => item.startsWith(prefix));
+          if (cookie) return decodeURIComponent(cookie.slice(prefix.length));
+        }
+        const legacy = typeof window !== 'undefined' ? window.localStorage?.getItem(key) : null;
+        if (legacy) {
+          await TokenStorage.setItem(key, legacy);
+          return legacy;
         }
       } catch {
         // Fallback a memoria
@@ -37,8 +49,11 @@ export const TokenStorage = {
 
     if (Platform.OS === 'web') {
       try {
-        if (typeof window !== 'undefined' && window.localStorage) {
-          window.localStorage.setItem(key, value);
+        if (typeof document !== 'undefined') {
+          document.cookie = `${cookieName(key)}=${encodeURIComponent(value)}; Max-Age=2592000; ${cookieOptions()}`;
+        }
+        if (typeof window !== 'undefined') {
+          window.localStorage?.removeItem(key);
         }
       } catch {
         // Error silencioso en web
@@ -58,8 +73,11 @@ export const TokenStorage = {
 
     if (Platform.OS === 'web') {
       try {
-        if (typeof window !== 'undefined' && window.localStorage) {
-          window.localStorage.removeItem(key);
+        if (typeof document !== 'undefined') {
+          document.cookie = `${cookieName(key)}=; Max-Age=0; ${cookieOptions()}`;
+        }
+        if (typeof window !== 'undefined') {
+          window.localStorage?.removeItem(key);
         }
       } catch {
         // Error silencioso en web

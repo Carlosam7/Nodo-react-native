@@ -1,3 +1,4 @@
+import { LineIcon } from "@/components/ui/line-icon";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -18,7 +19,7 @@ export function EditProjectScreen() {
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <ScrollView contentContainerStyle={[styles.content, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 24 }]} keyboardShouldPersistTaps="handled">
-        <Pressable onPress={back} disabled={saving} accessibilityRole="button"><Text style={styles.backText}>← Volver</Text></Pressable>
+        <Pressable onPress={back} disabled={saving} accessibilityRole="button"><View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}><LineIcon name="arrow-left" size={19} color={NodoColors.primary} /><Text style={styles.backText}>Volver</Text></View></Pressable>
         <Text style={styles.heading}>Editar proyecto</Text>
         <Text style={styles.subtitle}>Actualiza el nombre, la descripción y los cupos disponibles.</Text>
         <View style={styles.card}>

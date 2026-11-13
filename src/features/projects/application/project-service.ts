@@ -8,6 +8,7 @@ import { selectProjects } from "./list-projects";
 import { editProject } from "./edit-project";
 import { archiveProject } from "./archive-project";
 import { changeProjectStatus } from "./change-project-status";
+import type { NewNotification } from "@/features/notifications/domain/notification";
 
 export interface ProjectRepository {
   fetchCategories(): Promise<string[]>;
@@ -23,7 +24,7 @@ export interface ProjectRepository {
 }
 
 export class ProjectService implements ProjectOperations {
-  constructor(private readonly repository: ProjectRepository, private readonly profiles: UserProfileRepository) {}
+  constructor(private readonly repository: ProjectRepository, private readonly profiles: UserProfileRepository, private readonly notifications?: { send(item: NewNotification): Promise<void> }) {}
   fetchCategories() { return this.repository.fetchCategories(); }
   async fetchProjects(options?: { category?: string }) { return selectProjects(await this.repository.fetchProjects(), options?.category); }
   fetchProjectById(id: string) { return this.repository.fetchProjectById(id); }
@@ -35,5 +36,19 @@ export class ProjectService implements ProjectOperations {
   }
   editProject(id: string, draft: ProjectEdit, actor: User) { return editProject(this.repository, id, draft, actor); }
   archiveProject(id: string, actor: User) { return archiveProject(this.repository, id, actor); }
-  publishUpdate(input: PublishUpdateInput) { return publishUpdate(this.repository, input); }
+  async publishUpdate(input: PublishUpdateInput) {
+    const update = await publishUpdate(this.repository, input);
+    if (this.notifications) {
+      try {
+        const project = await this.repository.fetchProjectById(input.projectId);
+        if (project) {
+          const members = await this.repository.fetchTeamMembers(project);
+          const recipients = new Set([project.creatorId, ...members.map((member) => member.userId)]);
+          recipients.delete(input.author.id);
+          await Promise.all([...recipients].map((recipientId) => this.notifications!.send({ recipientId, projectId: project.id, kind: "update", title: "Nuevo avance", body: `${input.author.name} publicó un avance en ${project.title}.` })));
+        }
+      } catch (error) { console.warn("No se pudieron guardar las notificaciones del avance", error); }
+    }
+    return update;
+  }
 }

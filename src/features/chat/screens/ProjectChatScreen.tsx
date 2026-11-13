@@ -1,3 +1,4 @@
+import { LineIcon } from "@/components/ui/line-icon";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useRef } from "react";
 import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
@@ -16,7 +17,7 @@ export function ProjectChatScreen() {
   return (
     <KeyboardAvoidingView style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]} behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <View style={styles.header}>
-        <Pressable onPress={back} accessibilityRole="button" accessibilityLabel="Volver"><Text style={styles.back}>←</Text></Pressable>
+        <Pressable onPress={back} accessibilityRole="button" accessibilityLabel="Volver"><View style={{ paddingRight: 18 }}><LineIcon name="arrow-left" size={22} color={NodoColors.textPrimary} /></View></Pressable>
         <View style={styles.heading}><Text style={styles.title}>Chat del equipo</Text><Text style={styles.subtitle}>Líder e integrantes aceptados</Text></View>
       </View>
       {error ? <Text style={styles.error} accessibilityRole="alert">{error}</Text> : null}
