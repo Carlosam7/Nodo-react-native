@@ -6,6 +6,20 @@ Video demostrativo de la migración: [Ver demo en YouTube](TU_LINK_DE_YOUTUBE)
 
 > Reemplaza `TU_LINK_DE_YOUTUBE` por el enlace del video antes de entregar el repositorio.
 
+## Ejecutar la versión web con Docker
+
+Con Docker y Docker Compose instalados, ejecuta:
+
+```sh
+docker compose up --build -d
+```
+
+Abre `http://localhost:8090`. Para usar otro puerto, define `NODO_PORT` antes de iniciar Compose; por ejemplo, `NODO_PORT=8091 docker compose up --build -d`. Para detener el servicio, ejecuta `docker compose down`.
+
+Docker compila la versión web como una aplicación de una sola página y la sirve con Nginx. Las rutas dinámicas se resuelven en el navegador. Esta configuración no genera aplicaciones móviles ni incluye una instancia de Roble.
+
+Para personalizar la conexión, copia `.env.example` a `.env` y modifica las variables necesarias antes de construir. Las variables `EXPO_PUBLIC_*` se incorporan al código web durante la compilación y son visibles para cualquiera que use la aplicación; no pongas secretos en ellas. Si cambias sus valores, vuelve a ejecutar `docker compose up --build -d`.
+
 This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
 
 ## Get started

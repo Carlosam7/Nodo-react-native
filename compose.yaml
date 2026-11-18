@@ -1,0 +1,12 @@
+services:
+  nodo:
+    build:
+      context: .
+      args:
+        EXPO_PUBLIC_ROBLE_BASE_URL: ${EXPO_PUBLIC_ROBLE_BASE_URL:-}
+        EXPO_PUBLIC_ROBLE_CONTRACT_ID: ${EXPO_PUBLIC_ROBLE_CONTRACT_ID:-}
+        EXPO_PUBLIC_GUEST_EMAIL: ${EXPO_PUBLIC_GUEST_EMAIL:-}
+        EXPO_PUBLIC_GUEST_PASSWORD: ${EXPO_PUBLIC_GUEST_PASSWORD:-}
+    ports:
+      - "${NODO_PORT:-8090}:80"
+    restart: unless-stopped
